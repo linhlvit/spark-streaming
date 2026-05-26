@@ -1,0 +1,34 @@
+# Spark checkpoints
+checkpoints/
+
+# Java/Scala dependencies
+jars/
+ivy2/
+*.zip
+*.tar.gz
+*.jar
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.env
+.venv
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spark Streaming CDC — Thiết kế giải pháp</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  overflow:hidden; }
+.deck { width:100vw; height:100vh; position:relative; }
+.slide { position:absolute; inset:0; display:none; flex-direction:column;
+  justify-content:center; align-items:center; padding:60px; text-align:center;
+  opacity:0; transition:opacity 0.4s ease; }
+.slide.active { display:flex; opacity:1; }
+.slide-inner { max-width:960px; width:100%; }
+
+h1  { font-size:64px; font-weight:800; line-height:1.1; }
+h2  { font-size:48px; font-weight:700; line-height:1.2; margin-bottom:8px; }
+p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
+.accent  { color:#3B82F6; }
+.label   { font-size:14px; letter-spacing:2px; text-transform:uppercase;
+           color:#3B82F6; font-weight:600; margin-bottom:16px; }
+.sub     { font-size:26px; color:#a0a0a0; margin-top:16px; }
+.divider { width:60px; height:3px; background:#3B82F6;
+           border-radius:2px; margin:16px auto; }
+
+#counter { position:fixed; bottom:24px; right:32px;
+           font-size:13px; color:#555; letter-spacing:1px; z-index:100; }
+#prev, #next { position:fixed; bottom:20px; background:#1a1a1a;
+  border:1px solid #2a2a2a; color:#a0a0a0; cursor:pointer;
+  padding:8px 18px; border-radius:8px; font-size:14px; z-index:100;
+  transition:all 0.2s; }
+#prev { left:32px; } #next { left:90px; }
+#prev:hover, #next:hover { background:#2a2a2a; color:#fff; }
+
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:24px;
+           margin-top:36px; text-align:left; }
+.col-box { background:#1a1a1a; border:1px solid #2a2a2a;
+           border-radius:16px; padding:28px; }
+.col-box h4 { font-size:18px; font-weight:700; margin-bottom:14px; }
+.row-item { display:flex; gap:10px; align-items:flex-start;
+            margin-bottom:12px; font-size:15px; color:#ccc; line-height:1.4; }
+.row-item .dot { width:8px; height:8px; border-radius:50%;
+                 background:#3B82F6; flex-shrink:0; margin-top:5px; }
+
+.card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+             gap:16px; margin-top:36px; }
+.card { background:#1a1a1a; border:1px solid #2a2a2a;
+        border-radius:16px; padding:28px 20px; text-align:center; }
+.card .icon  { font-size:36px; margin-bottom:12px; }
+.card .ctitle { font-size:18px; font-weight:600; margin-bottom:6px; }
+.card .cdesc  { font-size:14px; color:#777; line-height:1.5; }
+
+.steps { display:flex; align-items:flex-start; justify-content:center;
+         gap:0; margin-top:40px; flex-wrap:nowrap; }
+.step  { display:flex; flex-direction:column; align-items:center;
+         text-align:center; flex:1; min-width:0; }
+.step-num   { width:44px; height:44px; border-radius:50%; background:#3B82F6;
+              color:#fff; display:flex; align-items:center; justify-content:center;
+              font-weight:700; font-size:18px; flex-shrink:0; }
+.step-label { font-size:15px; font-weight:600; margin-top:10px; line-height:1.3; }
+.step-sub   { font-size:12px; color:#666; margin-top:4px; line-height:1.4; padding:0 4px; }
+.arrow      { font-size:24px; color:#2a2a2a; padding:0 6px;
+              margin-top:10px; flex-shrink:0; }
+
+.tc-table   { width:100%; border-collapse:collapse; margin-top:28px;
+              font-size:15px; text-align:left; }
+.tc-table th { background:#1a1a1a; color:#3B82F6; padding:10px 14px;
+               font-size:13px; letter-spacing:1px; text-transform:uppercase;
+               border-bottom:1px solid #2a2a2a; }
+.tc-table td { padding:10px 14px; border-bottom:1px solid #1a1a1a;
+               color:#ccc; vertical-align:middle; }
+.tc-table tr:hover td { background:#131313; }
+.badge       { display:inline-block; padding:3px 10px; border-radius:20px;
+               font-size:12px; font-weight:600; }
+
+.rule-grid { display:grid; grid-template-columns:repeat(2,1fr);
+             gap:12px; margin-top:28px; text-align:left; }
+.rule-card  { background:#1a1a1a; border:1px solid #2a2a2a;
+              border-radius:12px; padding:16px 18px; }
+.rule-card .rtitle { font-size:15px; font-weight:700; color:#3B82F6; margin-bottom:6px; }
+.rule-card .rtext  { font-size:13px; color:#888; line-height:1.5; }
+.rule-card code    { background:#0d1117; color:#93c5fd; padding:2px 6px;
+                     border-radius:4px; font-size:12px; font-family:monospace; }
+
+.artifact-row { display:flex; gap:14px; margin-top:36px; align-items:stretch; }
+.artifact-box { flex:1; background:#1a1a1a; border:1px solid #2a2a2a;
+                border-radius:14px; padding:20px 16px; text-align:center; }
+.artifact-box .aicon  { font-size:28px; margin-bottom:8px; }
+.artifact-box .atitle { font-size:14px; font-weight:700; margin-bottom:4px; }
+.artifact-box .afile  { font-size:11px; color:#666; font-family:monospace; }
+.artifact-type { font-size:11px; letter-spacing:1px; text-transform:uppercase;
+                 font-weight:600; margin-bottom:6px; }
+.art-arrow { display:flex; align-items:center; color:#333;
+             font-size:20px; flex-shrink:0; }
+
+.err-row   { display:flex; gap:12px; margin-top:12px; align-items:center; }
+.err-badge { padding:4px 12px; border-radius:20px; font-size:13px;
+             font-weight:700; white-space:nowrap; }
+.err-text  { font-size:15px; color:#aaa; }
+
+.section-banner { display:inline-block; background:#1e3a5f;
+  border:1px solid #3B82F6; border-radius:20px; padding:4px 18px;
+  font-size:13px; font-weight:700; color:#60a5fa;
+  letter-spacing:1px; text-transform:uppercase; margin-bottom:20px; }
+
+.code-block { background:#0d1117; border:1px solid #1e3a5f; border-radius:10px;
+  padding:16px 20px; font-family:monospace; font-size:13px;
+  line-height:1.8; text-align:left; margin-top:12px; }
+
+.m2 .label    { color:#8B5CF6; }
+.m2 .accent   { color:#8B5CF6; }
+.m2 .step-num { background:#8B5CF6; }
+.m2 .dot      { background:#8B5CF6 !important; }
+.m2 .divider  { background:#8B5CF6; }
+.m2 .section-banner { background:#2d1b69; border-color:#8B5CF6; color:#c4b5fd; }
+
+.m3 .label    { color:#4ade80; }
+.m3 .accent   { color:#4ade80; }
+.m3 .step-num { background:#4ade80; color:#000; }
+.m3 .dot      { background:#4ade80 !important; }
+.m3 .divider  { background:#4ade80; }
+.m3 .section-banner { background:#1a2e1a; border-color:#4ade80; color:#86efac; }
+
+.m4 .label    { color:#f59e0b; }
+.m4 .accent   { color:#f59e0b; }
+.m4 .step-num { background:#f59e0b; color:#000; }
+.m4 .dot      { background:#f59e0b !important; }
+.m4 .divider  { background:#f59e0b; }
+.m4 .section-banner { background:#1c1200; border-color:#f59e0b; color:#fcd34d; }
+
+.m5 .label    { color:#f472b6; }
+.m5 .accent   { color:#f472b6; }
+.m5 .step-num { background:#f472b6; color:#000; }
+.m5 .dot      { background:#f472b6 !important; }
+.m5 .divider  { background:#f472b6; }
+.m5 .section-banner { background:#2a0d1e; border-color:#f472b6; color:#f9a8d4; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ── SLIDE 1: TITLE ── -->
+  <div class="slide active">
+    <div class="slide-inner">
+      <div class="label">POC · LPB Bank</div>
+      <h1>Spark Streaming<br><span class="accent">CDC Oracle → Oracle</span></h1>
+      <div class="divider"></div>
+      <p class="sub">Thiết kế giải pháp đồng bộ & làm giàu dữ liệu real-time</p>
+      <p style="margin-top:32px; font-size:16px; color:#444;">Debezium · Kafka · Spark Structured Streaming · Oracle ODS</p>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 2: BỐI CẢNH ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Bối cảnh</div>
+      <h2>Bài toán <span class="accent">cần giải quyết</span></h2>
+      <div class="two-col" style="margin-top:32px;">
+        <div class="col-box">
+          <h4 style="color:#f87171;">❌ Hiện trạng</h4>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Dữ liệu core banking (T24) chỉ truy cập qua batch hàng đêm</div>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Báo cáo & analytics luôn bị trễ 1 ngày</div>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Enrichment (giao dịch + chi nhánh) chưa có</div>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Dữ liệu mất khi downstream chưa sẵn sàng</div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#4ade80;">✅ Mục tiêu</h4>
+          <div class="row-item"><div class="dot"></div>Đồng bộ real-time (≤ 30s latency) qua CDC</div>
+          <div class="row-item"><div class="dot"></div>Enriched data sẵn sàng cho báo cáo & analytics</div>
+          <div class="row-item"><div class="dot"></div>Không mất sự kiện — at-least-once + idempotent sink</div>
+          <div class="row-item"><div class="dot"></div>DLQ tự động retry khi dependency chưa sẵn sàng</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 3: KIẾN TRÚC TỔNG THỂ ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Kiến trúc</div>
+      <h2>Pipeline <span class="accent">tổng thể</span></h2>
+      <div class="steps" style="margin-top:28px;">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-label">Oracle Source</div>
+          <div class="step-sub">T24 core banking<br>4 bảng giao dịch</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-label">Debezium CDC</div>
+          <div class="step-sub">LogMiner connector<br>op: r/c/u/d + envelope</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-label">Kafka Topics</div>
+          <div class="step-sub">oracle.LPB_POC.*<br>1 topic / bảng</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-label">Spark Streaming</div>
+          <div class="step-sub">4 job patterns<br>foreachBatch sink</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-label">Oracle ODS</div>
+          <div class="step-sub">Target tables<br>schema LPB_POC</div>
+        </div>
+      </div>
+      <div style="margin-top:28px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; text-align:left;">
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:12px 14px;">
+          <div style="font-size:11px; color:#3B82F6; font-weight:700; margin-bottom:5px; letter-spacing:1px;">SYNC JOB</div>
+          <div style="font-size:12px; color:#ccc;">T24_* → *_TARGET<br>Mirror 1:1, 4 bảng</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:12px 14px;">
+          <div style="font-size:11px; color:#8B5CF6; font-weight:700; margin-bottom:5px; letter-spacing:1px;">STATIC JOIN</div>
+          <div style="font-size:12px; color:#ccc;">TXN ⋈ BRANCH<br>→ T24_TXN_ENRICHED</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:12px 14px;">
+          <div style="font-size:11px; color:#4ade80; font-weight:700; margin-bottom:5px; letter-spacing:1px;">STREAM JOIN</div>
+          <div style="font-size:12px; color:#ccc;">TXN ⋈ ACCOUNT<br>→ T24_TXN_ACCOUNT_SNAPSHOT</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:12px 14px;">
+          <div style="font-size:11px; color:#f59e0b; font-weight:700; margin-bottom:5px; letter-spacing:1px;">AGGREGATION</div>
+          <div style="font-size:12px; color:#ccc;">TXN → doanh số<br>→ T24_BRANCH_SALES_SUMMARY</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 4: PATTERN KỸ THUẬT CHUNG ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Nền tảng kỹ thuật</div>
+      <h2>Pattern <span class="accent">áp dụng chung</span></h2>
+      <div class="card-grid" style="grid-template-columns:repeat(2,1fr); margin-top:32px;">
+        <div class="card" style="text-align:left;">
+          <div class="icon">⚡</div>
+          <div class="ctitle">foreachBatch Sink</div>
+          <div class="cdesc">Ghi Oracle per micro-batch. Idempotent qua Spark checkpoint — không replay cùng batch_id 2 lần.</div>
+        </div>
+        <div class="card" style="text-align:left;">
+          <div class="icon">🔄</div>
+          <div class="ctitle">Oracle MERGE (UPSERT)</div>
+          <div class="cdesc">MERGE ... ON (PK). An toàn khi batch replay. Named bind variables tránh SQL injection.</div>
+        </div>
+        <div class="card" style="text-align:left;">
+          <div class="icon">🔌</div>
+          <div class="ctitle">oracledb thuần (thin)</div>
+          <div class="cdesc">Không dùng spark.read.jdbc. Lý do: ClassCastException khi dùng JDBC driver trong foreachBatch executor.</div>
+        </div>
+        <div class="card" style="text-align:left;">
+          <div class="icon">⏱️</div>
+          <div class="ctitle">Last-write-wins Guard</div>
+          <div class="cdesc">MERGE WHEN MATCHED UPDATE WHERE t.event_ts &lt; s.event_ts — ngăn event cũ ghi đè event mới khi out-of-order.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 5: CDC SYNC ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-banner">📋 Pattern 1</div>
+      <h2>CDC Sync — <span class="accent">Mirror 1:1</span></h2>
+      <p style="margin-top:16px; color:#a0a0a0; font-size:20px;">Đồng bộ 4 bảng nguồn T24 sang Oracle target, xử lý đủ 4 loại op Debezium</p>
+      <table class="tc-table" style="margin-top:28px;">
+        <thead><tr><th>Kafka Topic</th><th>Target Table</th><th>Last-write-wins cột</th></tr></thead>
+        <tbody>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_TRANSACTIONS</code></td><td>T24_TRANSACTIONS_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">TRANSACTION_TIME</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_ACCOUNT</code></td><td>T24_ACCOUNT_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">EVENT_TIME</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_CUSTOMER</code></td><td>T24_CUSTOMER_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">UPDATED_AT</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_BRANCH</code></td><td>T24_BRANCH_TARGET</td><td><code style="color:#555; font-family:monospace;">— (immutable)</code></td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:20px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:14px 20px; text-align:left;">
+        <span style="font-size:13px; color:#3B82F6; font-weight:700;">Luồng xử lý: </span>
+        <span style="font-size:13px; color:#aaa;">readStream (Kafka) → parse Debezium envelope → foreachBatch → op r/c/u: MERGE (LWW guard) | op d: DELETE</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 6: STATIC JOIN ── -->
+  <div class="slide m2">
+    <div class="slide-inner">
+      <div class="section-banner">🔗 Pattern 2</div>
+      <h2>Stream-Static Join — <span style="color:#8B5CF6;">TXN ⋈ BRANCH</span></h2>
+      <div class="artifact-row" style="margin-top:28px;">
+        <div class="artifact-box" style="border-color:#4c1d95;">
+          <div class="artifact-type" style="color:#c4b5fd;">STREAM (Kafka)</div>
+          <div class="aicon">📨</div>
+          <div class="atitle">T24_TRANSACTIONS</div>
+          <div class="afile">oracle.LPB_POC.T24_TRANSACTIONS</div>
+        </div>
+        <div class="art-arrow">+</div>
+        <div class="artifact-box" style="border-color:#1e3a5f;">
+          <div class="artifact-type" style="color:#60a5fa;">STATIC (Oracle)</div>
+          <div class="aicon">🏦</div>
+          <div class="atitle">T24_BRANCH</div>
+          <div class="afile">refresh mỗi batch</div>
+        </div>
+        <div class="art-arrow">→</div>
+        <div class="artifact-box" style="border-color:#1a2e1a;">
+          <div class="artifact-type" style="color:#4ade80;">OUTPUT</div>
+          <div class="aicon">✅</div>
+          <div class="atitle">T24_TXN_ENRICHED</div>
+          <div class="afile">BRANCH_NAME · REGION_CODE · REGION_NAME</div>
+        </div>
+        <div class="art-arrow">hoặc</div>
+        <div class="artifact-box" style="border-color:#2a1a1a;">
+          <div class="artifact-type" style="color:#f87171;">DLQ</div>
+          <div class="aicon">⏳</div>
+          <div class="atitle">T24_TXN_PENDING_JOIN</div>
+          <div class="afile">STATUS = PENDING</div>
+        </div>
+      </div>
+      <div style="margin-top:24px; display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:left;">
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 16px;">
+          <span style="font-size:12px; color:#f87171; font-weight:700;">BRANCH_NOT_FOUND</span>
+          <div style="font-size:13px; color:#888; margin-top:4px;">Branch có dữ liệu nhưng BRANCH_CODE của TXN chưa sync về</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 16px;">
+          <span style="font-size:12px; color:#f87171; font-weight:700;">BRANCH_TABLE_EMPTY</span>
+          <div style="font-size:13px; color:#888; margin-top:4px;">Bảng T24_BRANCH chưa được seed (fresh deployment)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 7: STATIC JOIN — DLQ DESIGN ── -->
+  <div class="slide m2">
+    <div class="slide-inner">
+      <div class="label">Static Join · Quyết định</div>
+      <h2>Tại sao <span style="color:#8B5CF6;">flat schema</span> cho DLQ?</h2>
+      <div class="two-col" style="margin-top:28px;">
+        <div class="col-box">
+          <h4 style="color:#f87171;">❌ CLOB JSON</h4>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Retry cần deserialize JSON để lấy BRANCH_CODE</div>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Khó query trực tiếp bằng SQL khi debug</div>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Không thể đặt index hay alert theo field</div>
+          <div class="row-item"><div class="dot" style="background:#f87171;"></div>Phù hợp khi schema thay đổi thường xuyên</div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#4ade80;">✅ Flat Schema</h4>
+          <div class="row-item"><div class="dot"></div>BRANCH_CODE truy cập trực tiếp, không cần parse</div>
+          <div class="row-item"><div class="dot"></div>Dễ query, alert, debug bằng SQL thuần</div>
+          <div class="row-item"><div class="dot"></div>Index được trên BRANCH_CODE để group retry</div>
+          <div class="row-item"><div class="dot"></div>Schema T24_TRANSACTIONS ổn định — không cần generic</div>
+        </div>
+      </div>
+      <div style="margin-top:24px; background:#0d1117; border:1px solid #4c1d95; border-radius:10px; padding:12px 20px; text-align:left;">
+        <span style="font-size:13px; color:#c4b5fd; font-weight:700;">Exponential backoff: </span>
+        <span style="font-size:13px; color:#aaa;">static_join 5→15→60→240→1440 phút | stream_join 10→30→120→360→1440 phút — NEXT_RETRY_AT trong Oracle, không dùng sleep thread</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 8: STREAM JOIN ── -->
+  <div class="slide m3">
+    <div class="slide-inner">
+      <div class="section-banner">🔀 Pattern 3</div>
+      <h2>Stream-Stream Join — <span style="color:#4ade80;">TXN ⋈ ACCOUNT</span></h2>
+      <div style="margin-top:24px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; text-align:left;">
+        <div style="background:#1a1a1a; border:1px solid #1a2e1a; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#4ade80; font-weight:700; margin-bottom:8px; letter-spacing:1px;">STREAM A</div>
+          <div style="font-size:16px; font-weight:700; margin-bottom:6px;">T24_TRANSACTIONS</div>
+          <div style="font-size:13px; color:#666;">TRANSACTION_ID, ACCOUNT_ID, AMOUNT, TRANSACTION_TIME (ts_ms)</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1a2e1a; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#4ade80; font-weight:700; margin-bottom:8px; letter-spacing:1px;">STREAM B</div>
+          <div style="font-size:16px; font-weight:700; margin-bottom:6px;">T24_ACCOUNT</div>
+          <div style="font-size:13px; color:#666;">ACCOUNT_ID, ONLINE_ACTUAL_BAL, WORKING_BALANCE, EVENT_TIME (ts_ms)</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1a2e1a; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#4ade80; font-weight:700; margin-bottom:8px; letter-spacing:1px;">OUTPUT</div>
+          <div style="font-size:16px; font-weight:700; margin-bottom:6px;">T24_TXN_ACCOUNT_SNAPSHOT</div>
+          <div style="font-size:13px; color:#666;">Số dư tài khoản tại thời điểm giao dịch (BALANCE_AT_TXN)</div>
+        </div>
+      </div>
+      <div style="margin-top:16px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:12px; align-items:center;">
+        <span style="font-size:13px; color:#4ade80; font-weight:700; white-space:nowrap;">Join condition:</span>
+        <code style="font-size:13px; color:#93c5fd; font-family:monospace;">INNER JOIN ON ACCOUNT_ID AND txn_ts BETWEEN acct_ts ± 30 MINUTES</code>
+      </div>
+      <div style="margin-top:10px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:12px; align-items:center;">
+        <span style="font-size:13px; color:#4ade80; font-weight:700; white-space:nowrap;">Watermark:</span>
+        <span style="font-size:13px; color:#aaa;"><code style="color:#93c5fd; font-family:monospace;">kafka.timestamp</code> (broker) thay vì <code style="color:#f87171; font-family:monospace;">ts_ms</code> — tránh evict sớm khi replay. Không khớp → DLQ <code style="color:#93c5fd; font-family:monospace;">T24_TXN_ACCT_PENDING_JOIN</code></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 9: AGGREGATION ── -->
+  <div class="slide m4">
+    <div class="slide-inner">
+      <div class="section-banner">📊 Pattern 4</div>
+      <h2>Stateful Aggregation — <span style="color:#f59e0b;">Doanh số chi nhánh</span></h2>
+      <div style="margin-top:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; text-align:left;">
+        <div style="background:#1a1a1a; border:1px solid #1c1200; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#f59e0b; font-weight:700; margin-bottom:10px; letter-spacing:1px;">LUỒNG XỬ LÝ</div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>op=c (INSERT): <code style="color:#93c5fd; font-family:monospace; font-size:12px;">SIGNED = +AMOUNT</code></div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>op=u (REVERT): <code style="color:#93c5fd; font-family:monospace; font-size:12px;">SIGNED = −before.AMOUNT</code></div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>groupBy BRANCH_CODE, RPT_DATE, CURRENCY_CODE</div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>MERGE += DELTA (cộng dồn, không tính lại)</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1c1200; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#f59e0b; font-weight:700; margin-bottom:10px; letter-spacing:1px;">IDEMPOTENCY</div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>T24_STREAM_BATCH_LOG ghi batch_id đã xử lý</div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>Cùng Oracle transaction với MERGE delta</div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>Spark replay batch_id cũ → skip, không double-count</div>
+          <div class="row-item"><div class="dot" style="background:#f59e0b;"></div>Cleanup log &gt; 7 ngày sau mỗi batch commit</div>
+        </div>
+      </div>
+      <div style="margin-top:16px; background:#0d1117; border:1px solid #1c1200; border-radius:10px; padding:12px 20px; text-align:left;">
+        <span style="font-size:13px; color:#f59e0b; font-weight:700;">Output: </span>
+        <code style="font-size:13px; color:#93c5fd; font-family:monospace;">T24_BRANCH_SALES_SUMMARY(BRANCH_CODE, RPT_DATE, CURRENCY_CODE, TOTAL_AMOUNT, TXN_COUNT)</code>
+        <span style="font-size:13px; color:#555;"> — PK composite, latency ~35–70s</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 10: OUT-OF-ORDER CDC ── -->
+  <div class="slide m5">
+    <div class="slide-inner">
+      <div class="section-banner">⚡ Out-of-order CDC</div>
+      <h2>Xử lý <span style="color:#f472b6;">sự kiện lệch thứ tự</span></h2>
+      <div style="margin-top:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; text-align:left;">
+        <div style="background:#1a1a1a; border:1px solid #2a0d1e; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#f9a8d4; font-weight:700; margin-bottom:10px; letter-spacing:1px;">NGUỒN GỐC</div>
+          <div class="row-item"><div class="dot" style="background:#f472b6;"></div>Debezium restart đọc lại từ earliest</div>
+          <div class="row-item"><div class="dot" style="background:#f472b6;"></div>Kafka multi-partition: consumer lag không đều</div>
+          <div class="row-item"><div class="dot" style="background:#f472b6;"></div>Oracle RAC: LogMiner từ nhiều node</div>
+          <div class="row-item"><div class="dot" style="background:#f472b6;"></div>Spark executor restart — batch replay</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a0d1e; border-radius:14px; padding:18px;">
+          <div style="font-size:12px; color:#f9a8d4; font-weight:700; margin-bottom:10px; letter-spacing:1px;">GIẢI PHÁP</div>
+          <div class="row-item"><div class="dot" style="background:#f472b6;"></div><strong>CDC Sync:</strong> last-write-wins guard trong MERGE</div>
+          <div style="background:#0d1117; border-radius:6px; padding:6px 10px; margin-bottom:8px; font-size:12px; color:#93c5fd; font-family:monospace;">WHERE t.event_ts &lt; s.event_ts</div>
+          <div class="row-item"><div class="dot" style="background:#f472b6;"></div><strong>Aggregation:</strong> revert semantics từ before.AMOUNT</div>
+          <div style="background:#0d1117; border-radius:6px; padding:6px 10px; font-size:12px; color:#93c5fd; font-family:monospace;">op=u → SIGNED = −before.AMOUNT</div>
+        </div>
+      </div>
+      <div style="margin-top:16px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left;">
+        <span style="font-size:13px; color:#f472b6; font-weight:700;">Không ảnh hưởng: </span>
+        <span style="font-size:13px; color:#aaa;">Stream-Stream Join dùng watermark ±30min để tự lọc event quá cũ. Static Join reload branch mỗi batch nên luôn có data mới nhất.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 11: DLQ — VẤN ĐỀ DAEMON THREAD ── -->
+  <div class="slide m4">
+    <div class="slide-inner">
+      <div class="section-banner">⚠️ DLQ Design</div>
+      <h2>Tại sao <span style="color:#f59e0b;">không</span> dùng daemon thread?</h2>
+      <div style="margin-top:28px; display:grid; grid-template-columns:1fr; gap:12px; text-align:left; max-width:800px; margin:28px auto 0;">
+        <div class="err-row">
+          <span class="err-badge" style="background:#2a0a0a; color:#f87171;">❌ Tài nguyên</span>
+          <span class="err-text">Daemon thread chiếm executor Spark — cạnh tranh với streaming job chính</span>
+        </div>
+        <div class="err-row">
+          <span class="err-badge" style="background:#2a1a00; color:#fb923c;">❌ Checkpoint</span>
+          <span class="err-text">Không được Spark checkpoint quản lý — mất trạng thái khi executor restart</span>
+        </div>
+        <div class="err-row">
+          <span class="err-badge" style="background:#2a1a00; color:#fb923c;">❌ Độc lập</span>
+          <span class="err-text">Không thể restart riêng lẻ — phải restart cả streaming job</span>
+        </div>
+        <div class="err-row">
+          <span class="err-badge" style="background:#1a1a00; color:#facc15;">❌ Quan sát</span>
+          <span class="err-text">Không có log/metric riêng — khó debug, không thể alert theo DLQ rate</span>
+        </div>
+        <div class="err-row">
+          <span class="err-badge" style="background:#1a1a00; color:#facc15;">❌ Scheduling</span>
+          <span class="err-text">Không thể lên lịch linh hoạt (exponential backoff, peak-hour throttle)</span>
+        </div>
+      </div>
+      <p style="margin-top:20px; font-size:16px; color:#555;">Nguồn: Uber Engineering — "Building Reliable Reprocessing and Dead Letter Queues" (Ning Xia, 2018)</p>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 12: DLQ — LIFECYCLE ── -->
+  <div class="slide m4">
+    <div class="slide-inner">
+      <div class="label">DLQ · Lifecycle</div>
+      <h2>STATUS <span style="color:#f59e0b;">transition</span></h2>
+      <div class="two-col" style="margin-top:28px;">
+        <div class="col-box">
+          <h4 style="color:#8B5CF6; margin-bottom:16px;">T24_TXN_PENDING_JOIN<br><span style="font-size:13px; color:#666; font-weight:400;">(static_join · backoff 5→1440 phút)</span></h4>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="badge" style="background:#1e3a5f; color:#60a5fa;">PENDING</span>
+              <span style="color:#555;">→</span>
+              <span class="badge" style="background:#1a2e1a; color:#4ade80;">RESOLVED</span>
+              <span style="font-size:12px; color:#666; margin-left:6px;">branch tìm được khi retry</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="badge" style="background:#1e3a5f; color:#60a5fa;">PENDING</span>
+              <span style="color:#555;">→</span>
+              <span class="badge" style="background:#2a0a0a; color:#f87171;">FAILED</span>
+              <span style="font-size:12px; color:#666; margin-left:6px;">đạt MAX_RETRY=5</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#4ade80; margin-bottom:16px;">T24_TXN_ACCT_PENDING_JOIN<br><span style="font-size:13px; color:#666; font-weight:400;">(stream_join · backoff 10→1440 phút)</span></h4>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="badge" style="background:#1e3a5f; color:#60a5fa;">PENDING</span>
+              <span style="color:#555;">→</span>
+              <span class="badge" style="background:#1a2e1a; color:#4ade80;">RESOLVED</span>
+              <span style="font-size:12px; color:#666; margin-left:6px;">lookup ACCOUNT_TARGET thành công</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="badge" style="background:#1e3a5f; color:#60a5fa;">PENDING</span>
+              <span style="color:#555;">→</span>
+              <span class="badge" style="background:#2a0a0a; color:#f87171;">FAILED</span>
+              <span style="font-size:12px; color:#666; margin-left:6px;">đạt MAX_RETRY=5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:12px; align-items:center;">
+        <code style="font-size:13px; color:#93c5fd; font-family:monospace;">python3 tools/retry_txn_branch_dlq.py --once</code>
+        <span style="font-size:13px; color:#555;">|</span>
+        <code style="font-size:13px; color:#93c5fd; font-family:monospace;">python3 tools/retry_txn_acct_dlq.py --interval 600</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 13: BẢNG QUYẾT ĐỊNH ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Thiết kế</div>
+      <h2>Bảng <span class="accent">quyết định kỹ thuật</span></h2>
+      <table class="tc-table" style="margin-top:20px; font-size:14px;">
+        <thead><tr><th>Quyết định</th><th>Lựa chọn</th><th>Lý do chính</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Sink Oracle</td>
+            <td><code style="color:#93c5fd; font-family:monospace;">oracledb</code> + MERGE</td>
+            <td>JDBC gây ClassCastException trong foreachBatch</td>
+          </tr>
+          <tr>
+            <td>Watermark</td>
+            <td><code style="color:#93c5fd; font-family:monospace;">kafka.timestamp</code></td>
+            <td>ts_ms quá cũ khi replay, evict ngay toàn bộ event</td>
+          </tr>
+          <tr>
+            <td>Out-of-order CDC Sync</td>
+            <td>Last-write-wins guard</td>
+            <td>MERGE WHERE t.ts &lt; s.ts — event cũ không ghi đè event mới</td>
+          </tr>
+          <tr>
+            <td>Out-of-order Aggregation</td>
+            <td>Revert semantics</td>
+            <td>op=u → SIGNED = -before.AMOUNT, không cần tính lại toàn bộ</td>
+          </tr>
+          <tr>
+            <td>Aggregation state</td>
+            <td>Oracle (không dùng Spark window)</td>
+            <td>Spark window state mất khi restart, cần seeding lại</td>
+          </tr>
+          <tr>
+            <td>Aggregation idempotency</td>
+            <td>T24_STREAM_BATCH_LOG</td>
+            <td>Spark replay batch → MERGE += delta sẽ double-count nếu không guard</td>
+          </tr>
+          <tr>
+            <td>DLQ storage</td>
+            <td>Flat schema per-job</td>
+            <td>Retry cần field trực tiếp; isolation tốt hơn; payload khác nhau</td>
+          </tr>
+          <tr>
+            <td>DLQ retry</td>
+            <td>Standalone + exponential backoff</td>
+            <td>Daemon thread không được Spark checkpoint quản lý</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 14: MỞ RỘNG & SUMMARY ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Kết luận</div>
+      <h2><span class="accent">Tổng kết</span> & hướng mở rộng</h2>
+      <div class="card-grid" style="grid-template-columns:repeat(3,1fr); margin-top:28px;">
+        <div class="card">
+          <div class="icon">🔌</div>
+          <div class="ctitle">Thêm job mới</div>
+          <div class="cdesc">Copy file trong đúng pattern folder (static_join/ hoặc stream_join/), đổi bảng, tạo DLQ table, tạo retry script.</div>
+        </div>
+        <div class="card">
+          <div class="icon">📊</div>
+          <div class="ctitle">Thêm aggregation</div>
+          <div class="cdesc">Tạo file aggregation/ mới, đặt JOB_NAME riêng, dùng T24_STREAM_BATCH_LOG với PK (JOB_NAME, BATCH_ID).</div>
+        </div>
+        <div class="card">
+          <div class="icon">⚙️</div>
+          <div class="ctitle">Airflow scheduling</div>
+          <div class="cdesc">retry_pending_once() import trực tiếp vào PythonOperator. DAG dlq_retry chạy mỗi 10 phút song song 2 DLQ.</div>
+        </div>
+      </div>
+      <div style="margin-top:28px; display:grid; grid-template-columns:repeat(5,1fr); gap:10px;">
+        <div style="background:#1a1a1a; border:1px solid #1e3a5f; border-radius:10px; padding:12px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#3B82F6;">4</div>
+          <div style="font-size:12px; color:#666; margin-top:4px;">Job patterns</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1e3a5f; border-radius:10px; padding:12px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#4ade80;">2</div>
+          <div style="font-size:12px; color:#666; margin-top:4px;">DLQ tables</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1e3a5f; border-radius:10px; padding:12px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#f59e0b;">1</div>
+          <div style="font-size:12px; color:#666; margin-top:4px;">Summary table</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1e3a5f; border-radius:10px; padding:12px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#f472b6;">0</div>
+          <div style="font-size:12px; color:#666; margin-top:4px;">Daemon threads</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #1e3a5f; border-radius:10px; padding:12px; text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:#8B5CF6;">∞</div>
+          <div style="font-size:12px; color:#666; margin-top:4px;">Idempotent</div>
+        </div>
+      </div>
+      <div class="divider" style="margin-top:24px;"></div>
+      <p style="margin-top:12px; font-size:16px;">Chi tiết: <code style="color:#93c5fd; font-family:monospace;">docs/DESIGN.md</code> · Test: <code style="color:#93c5fd; font-family:monospace;">python3 tools/test_pipeline.py --scenario all</code></p>
+    </div>
+  </div>
+
+</div>
+<div id="counter">1 / 14</div>
+<button id="prev">←</button>
+<button id="next">→</button>
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let cur = 0;
+  function show(n) {
+    slides[cur].classList.remove('active');
+    cur = (n + slides.length) % slides.length;
+    slides[cur].classList.add('active');
+    document.getElementById('counter').textContent = (cur+1)+' / '+slides.length;
+  }
+  document.getElementById('next').addEventListener('click', () => show(cur+1));
+  document.getElementById('prev').addEventListener('click', () => show(cur-1));
+  document.addEventListener('keydown', e => {
+    if (e.key==='ArrowRight'||e.key==='ArrowDown') show(cur+1);
+    if (e.key==='ArrowLeft' ||e.key==='ArrowUp')   show(cur-1);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POC Demo Scenarios — Spark Streaming CDC</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  overflow:hidden; }
+.deck { width:100vw; height:100vh; position:relative; }
+.slide { position:absolute; inset:0; display:none; flex-direction:column;
+  justify-content:center; align-items:center; padding:56px 60px; text-align:center;
+  opacity:0; transition:opacity 0.4s ease; }
+.slide.active { display:flex; opacity:1; }
+.slide-inner { max-width:980px; width:100%; }
+
+h1  { font-size:56px; font-weight:800; line-height:1.1; }
+h2  { font-size:40px; font-weight:700; line-height:1.2; margin-bottom:6px; }
+.accent { color:#3B82F6; }
+.label  { font-size:13px; letter-spacing:2px; text-transform:uppercase;
+          color:#3B82F6; font-weight:600; margin-bottom:14px; }
+.divider { width:60px; height:3px; background:#3B82F6; border-radius:2px; margin:14px auto; }
+.sub { font-size:22px; color:#a0a0a0; margin-top:12px; }
+
+#counter { position:fixed; bottom:24px; right:32px;
+           font-size:13px; color:#555; letter-spacing:1px; z-index:100; }
+#prev, #next { position:fixed; bottom:20px; background:#1a1a1a;
+  border:1px solid #2a2a2a; color:#a0a0a0; cursor:pointer;
+  padding:8px 18px; border-radius:8px; font-size:14px; z-index:100;
+  transition:all 0.2s; }
+#prev { left:32px; } #next { left:90px; }
+#prev:hover, #next:hover { background:#2a2a2a; color:#fff; }
+
+.scenario-num { display:inline-block; width:36px; height:36px; border-radius:50%;
+  font-size:16px; font-weight:800; line-height:36px; text-align:center;
+  flex-shrink:0; }
+
+.flow { display:flex; align-items:center; gap:0; margin:18px 0; flex-wrap:nowrap; }
+.flow-step { flex:1; background:#1a1a1a; border:1px solid #2a2a2a;
+  border-radius:12px; padding:12px 10px; text-align:center; min-width:0; }
+.flow-step .fs-icon { font-size:22px; margin-bottom:6px; }
+.flow-step .fs-label { font-size:13px; font-weight:700; line-height:1.3; }
+.flow-step .fs-sub { font-size:11px; color:#555; margin-top:3px; line-height:1.4; }
+.flow-arrow { font-size:18px; color:#333; padding:0 8px; flex-shrink:0; }
+
+.cmd-block { background:#0d1117; border:1px solid #1e3a5f; border-radius:10px;
+  padding:12px 16px; font-family:monospace; font-size:13px; color:#93c5fd;
+  line-height:1.8; text-align:left; margin-top:10px; }
+.cmd-comment { color:#555; }
+.cmd-key { color:#4ade80; }
+
+.check-row { display:flex; gap:10px; align-items:flex-start;
+  margin-bottom:8px; font-size:14px; color:#ccc; line-height:1.4; text-align:left; }
+.check-icon { flex-shrink:0; font-size:14px; margin-top:1px; }
+
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px; text-align:left; }
+.col-box { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:14px; padding:20px; }
+.col-box h4 { font-size:15px; font-weight:700; margin-bottom:12px; }
+
+.badge { display:inline-block; padding:3px 10px; border-radius:20px;
+         font-size:12px; font-weight:700; }
+
+.section-tag { display:inline-block; background:#1e3a5f; border:1px solid #3B82F6;
+  border-radius:20px; padding:3px 14px; font-size:12px; font-weight:700;
+  color:#60a5fa; letter-spacing:1px; text-transform:uppercase; margin-bottom:14px; }
+
+.result-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+  gap:12px; margin-top:16px; }
+.result-card { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px;
+  padding:14px; text-align:center; }
+.result-card .rc-val { font-size:20px; font-weight:800; margin-bottom:4px; }
+.result-card .rc-label { font-size:11px; color:#555; }
+
+.scenario-list { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px; text-align:left; }
+.sl-item { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px;
+  padding:12px 14px; display:flex; gap:10px; align-items:flex-start; }
+.sl-num { font-size:13px; font-weight:800; flex-shrink:0; margin-top:1px; }
+.sl-body .sl-title { font-size:14px; font-weight:700; margin-bottom:3px; }
+.sl-body .sl-desc { font-size:12px; color:#666; line-height:1.4; }
+
+.latency-bar { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.lb-label { font-size:13px; color:#aaa; width:160px; flex-shrink:0; text-align:right; }
+.lb-track { flex:1; background:#1a1a1a; border-radius:4px; height:8px; }
+.lb-fill { height:8px; border-radius:4px; }
+.lb-val { font-size:13px; font-weight:700; width:60px; flex-shrink:0; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ── SLIDE 1: TITLE ── -->
+  <div class="slide active">
+    <div class="slide-inner">
+      <div class="label">Demo Walkthrough</div>
+      <h1>Kịch bản <span class="accent">POC Demo</span></h1>
+      <div class="divider"></div>
+      <p class="sub">10 kịch bản kiểm tra end-to-end toàn bộ 4 pattern streaming</p>
+      <div style="margin-top:36px; display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:14px;">
+          <div style="font-size:11px; color:#3B82F6; font-weight:700; letter-spacing:1px; margin-bottom:6px;">PATTERN 1</div>
+          <div style="font-size:13px; color:#ccc;">CDC Sync<br>3 kịch bản</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:14px;">
+          <div style="font-size:11px; color:#8B5CF6; font-weight:700; letter-spacing:1px; margin-bottom:6px;">PATTERN 2</div>
+          <div style="font-size:13px; color:#ccc;">Static Join<br>2 kịch bản + DLQ</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:14px;">
+          <div style="font-size:11px; color:#4ade80; font-weight:700; letter-spacing:1px; margin-bottom:6px;">PATTERN 3</div>
+          <div style="font-size:13px; color:#ccc;">Stream Join<br>1 kịch bản</div>
+        </div>
+        <div style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:14px;">
+          <div style="font-size:11px; color:#f59e0b; font-weight:700; letter-spacing:1px; margin-bottom:6px;">PATTERN 4</div>
+          <div style="font-size:13px; color:#ccc;">Aggregation<br>2 kịch bản + latency</div>
+        </div>
+      </div>
+      <div style="margin-top:24px; background:#0d1117; border:1px solid #1e3a5f; border-radius:10px; padding:12px 20px; text-align:center;">
+        <code style="font-size:14px; color:#93c5fd; font-family:monospace;">python3 tools/test_pipeline.py --scenario all --timeout 120</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 2: TỔNG QUAN 10 KỊCH BẢN ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Tổng quan</div>
+      <h2>10 kịch bản <span class="accent">kiểm tra</span></h2>
+      <div class="scenario-list">
+        <div class="sl-item">
+          <div class="sl-num" style="color:#3B82F6;">S1</div>
+          <div class="sl-body"><div class="sl-title">CDC Sync INSERT</div><div class="sl-desc">Giao dịch mới → T24_TRANSACTIONS_TARGET</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#3B82F6;">S2</div>
+          <div class="sl-body"><div class="sl-title">CDC Sync UPDATE</div><div class="sl-desc">Cập nhật trạng thái → last-write-wins guard</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#3B82F6;">S3</div>
+          <div class="sl-body"><div class="sl-title">CDC Sync DELETE</div><div class="sl-desc">Xóa chi nhánh → xóa khỏi TARGET</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#8B5CF6;">S4</div>
+          <div class="sl-body"><div class="sl-title">Static Join thành công</div><div class="sl-desc">TXN có BRANCH → T24_TXN_ENRICHED với BRANCH_NAME</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#8B5CF6;">S5</div>
+          <div class="sl-body"><div class="sl-title">DLQ — Branch không tồn tại</div><div class="sl-desc">BRANCH_CODE giả → vào DLQ, BRANCH_NOT_FOUND</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#8B5CF6;">S6</div>
+          <div class="sl-body"><div class="sl-title">DLQ Retry RESOLVED</div><div class="sl-desc">Branch xuất hiện sau → DLQ retry → RESOLVED</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#4ade80;">S7</div>
+          <div class="sl-body"><div class="sl-title">Stream Join Snapshot</div><div class="sl-desc">TXN ⋈ ACCOUNT → BALANCE_AT_TXN chính xác</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#f59e0b;">S8</div>
+          <div class="sl-body"><div class="sl-title">Aggregation tích lũy</div><div class="sl-desc">3 TXN → TOTAL_AMOUNT cộng dồn đúng</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#f59e0b;">S9</div>
+          <div class="sl-body"><div class="sl-title">Aggregation revert</div><div class="sl-desc">TXN bị revert → TOTAL_AMOUNT giảm</div></div>
+        </div>
+        <div class="sl-item">
+          <div class="sl-num" style="color:#f472b6;">S10</div>
+          <div class="sl-body"><div class="sl-title">Đo latency thực tế</div><div class="sl-desc">10 TXN → p95 latency end-to-end ≤ 90s</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 3: S1 — CDC SYNC INSERT ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S1 · Pattern 1</div>
+      <h2>CDC Sync — <span class="accent">INSERT mới</span></h2>
+      <div class="flow" style="margin-top:20px;">
+        <div class="flow-step">
+          <div class="fs-icon">📝</div>
+          <div class="fs-label">INSERT vào T24_TRANSACTIONS</div>
+          <div class="fs-sub">Nguồn Oracle T24</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1e3a5f;">
+          <div class="fs-icon">🔍</div>
+          <div class="fs-label">Debezium capture</div>
+          <div class="fs-sub">op=c, after.* payload</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#2d1b69;">
+          <div class="fs-icon">🌊</div>
+          <div class="fs-label">Kafka topic</div>
+          <div class="fs-sub">oracle.LPB_POC.T24_TRANSACTIONS</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">✅</div>
+          <div class="fs-label">T24_TRANSACTIONS_TARGET</div>
+          <div class="fs-sub">MERGE ON TRANSACTION_ID</div>
+        </div>
+      </div>
+      <div class="cmd-block">
+        <span class="cmd-comment"># Giả lập: tạo giao dịch với TRANSACTION_ID ngẫu nhiên</span><br>
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario sync
+      </div>
+      <div class="two-col">
+        <div class="col-box">
+          <h4 style="color:#3B82F6; font-size:14px;">Kiểm tra kết quả</h4>
+          <div class="check-row"><div class="check-icon">✅</div>Row xuất hiện trong T24_TRANSACTIONS_TARGET trong ≤ 30s</div>
+          <div class="check-row"><div class="check-icon">✅</div>AMOUNT, BRANCH_CODE khớp với INSERT nguồn</div>
+          <div class="check-row"><div class="check-icon">✅</div>Chạy lại → không duplicate (MERGE idempotent)</div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#555; font-size:14px;">SQL xác nhận</h4>
+          <div style="background:#0d1117; border-radius:8px; padding:10px; font-family:monospace; font-size:12px; color:#93c5fd; line-height:1.8;">
+            SELECT TRANSACTION_ID, AMOUNT,<br>
+            &nbsp;&nbsp;BRANCH_CODE<br>
+            FROM T24_TRANSACTIONS_TARGET<br>
+            WHERE TRANSACTION_ID = :id;
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 4: S2 — CDC SYNC UPDATE ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S2 · Pattern 1</div>
+      <h2>CDC Sync — <span class="accent">UPDATE last-write-wins</span></h2>
+      <div class="flow" style="margin-top:20px;">
+        <div class="flow-step">
+          <div class="fs-icon">✏️</div>
+          <div class="fs-label">INSERT → rồi UPDATE</div>
+          <div class="fs-sub">TRANSACTION_STATUS: PENDING → COMPLETED</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1e3a5f;">
+          <div class="fs-icon">📦</div>
+          <div class="fs-label">Debezium 2 events</div>
+          <div class="fs-sub">op=c rồi op=u (before+after)</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">🛡️</div>
+          <div class="fs-label">LWW Guard</div>
+          <div class="fs-sub">UPDATE WHERE t.TRANSACTION_TIME &lt; s.TRANSACTION_TIME</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">✅</div>
+          <div class="fs-label">TARGET = COMPLETED</div>
+          <div class="fs-sub">Event mới nhất thắng</div>
+        </div>
+      </div>
+      <div class="cmd-block">
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario sync_update
+      </div>
+      <div class="two-col">
+        <div class="col-box">
+          <h4 style="color:#3B82F6; font-size:14px;">Kiểm tra kết quả</h4>
+          <div class="check-row"><div class="check-icon">✅</div>TRANSACTION_STATUS = 'COMPLETED' trong TARGET</div>
+          <div class="check-row"><div class="check-icon">✅</div>Nếu 2 event đến out-of-order, event cũ không ghi đè</div>
+          <div class="check-row"><div class="check-icon">✅</div>AMOUNT không thay đổi (chỉ STATUS update)</div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#f472b6; font-size:14px;">Out-of-order test (thêm)</h4>
+          <div style="font-size:13px; color:#888; line-height:1.6;">
+            Gửi event cũ sau event mới → kiểm tra TARGET vẫn giữ giá trị mới.<br>
+            Guard: <code style="color:#93c5fd; font-size:11px;">WHERE t.ts &lt; s.ts</code> trong MERGE.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 5: S3 — CDC SYNC DELETE ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S3 · Pattern 1</div>
+      <h2>CDC Sync — <span class="accent">DELETE propagation</span></h2>
+      <div class="flow" style="margin-top:20px;">
+        <div class="flow-step">
+          <div class="fs-icon">📋</div>
+          <div class="fs-label">INSERT T24_BRANCH</div>
+          <div class="fs-sub">Chi nhánh test BR_TEST_DEL</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">✅</div>
+          <div class="fs-label">Sync về T24_BRANCH_TARGET</div>
+          <div class="fs-sub">Chờ row xuất hiện</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#2a0a0a;">
+          <div class="fs-icon">🗑️</div>
+          <div class="fs-label">DELETE T24_BRANCH nguồn</div>
+          <div class="fs-sub">Debezium op=d</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#2a0a0a;">
+          <div class="fs-icon">❌</div>
+          <div class="fs-label">T24_BRANCH_TARGET xóa</div>
+          <div class="fs-sub">DELETE WHERE BRANCH_CODE=:pk</div>
+        </div>
+      </div>
+      <div class="cmd-block">
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario sync_delete
+      </div>
+      <div style="margin-top:16px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:14px 20px; text-align:left; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div>
+          <div style="font-size:12px; color:#3B82F6; font-weight:700; margin-bottom:8px; letter-spacing:1px;">KIỂM TRA</div>
+          <div class="check-row"><div class="check-icon">✅</div>Row trong T24_BRANCH_TARGET = 0 sau DELETE nguồn</div>
+          <div class="check-row"><div class="check-icon">✅</div>Không ảnh hưởng đến các branch khác</div>
+        </div>
+        <div>
+          <div style="font-size:12px; color:#f59e0b; font-weight:700; margin-bottom:8px; letter-spacing:1px;">LƯU Ý</div>
+          <div style="font-size:13px; color:#777; line-height:1.6;">T24_BRANCH trong thực tế ít khi DELETE. Kịch bản này xác nhận op=d được xử lý đúng trong tất cả bảng SYNC.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 6: S4 — STATIC JOIN ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S4 · Pattern 2</div>
+      <h2>Static Join — <span style="color:#8B5CF6;">TXN ⋈ BRANCH thành công</span></h2>
+      <div class="flow" style="margin-top:20px;">
+        <div class="flow-step">
+          <div class="fs-icon">📨</div>
+          <div class="fs-label">INSERT TXN</div>
+          <div class="fs-sub">BRANCH_CODE = 'BR001' (tồn tại)</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#2d1b69;">
+          <div class="fs-icon">🔗</div>
+          <div class="fs-label">foreachBatch join</div>
+          <div class="fs-sub">Load T24_BRANCH từ Oracle</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">✅</div>
+          <div class="fs-label">T24_TXN_ENRICHED</div>
+          <div class="fs-sub">BRANCH_NAME, REGION_CODE, REGION_NAME</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="fs-icon">🚫</div>
+          <div class="fs-label">Không vào DLQ</div>
+          <div class="fs-sub">T24_TXN_PENDING_JOIN trống</div>
+        </div>
+      </div>
+      <div class="cmd-block">
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario static_join
+      </div>
+      <div class="two-col">
+        <div class="col-box">
+          <h4 style="color:#8B5CF6; font-size:14px;">Kiểm tra kết quả</h4>
+          <div class="check-row"><div class="check-icon">✅</div>Row trong T24_TXN_ENRICHED với BRANCH_NAME chính xác</div>
+          <div class="check-row"><div class="check-icon">✅</div>REGION_CODE, REGION_NAME từ T24_BRANCH</div>
+          <div class="check-row"><div class="check-icon">✅</div>TRANSACTION_ID KHÔNG có trong T24_TXN_PENDING_JOIN</div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#555; font-size:14px;">Latency mong đợi</h4>
+          <div style="font-size:13px; color:#888; line-height:1.6;">
+            Từ Oracle INSERT → T24_TXN_ENRICHED: <span style="color:#4ade80; font-weight:700;">≤ 30s</span><br>
+            Bao gồm: Debezium lag (~2s) + Kafka lag (~1s) + Spark micro-batch (~10s) + Oracle MERGE (~1s)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 7: S5 & S6 — DLQ BRANCH NOT FOUND → RETRY ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S5 + S6 · Pattern 2 DLQ</div>
+      <h2>DLQ — <span style="color:#8B5CF6;">Branch không tìm được → Retry</span></h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px;">
+        <div>
+          <div style="font-size:12px; color:#f87171; font-weight:700; letter-spacing:1px; margin-bottom:8px;">S5: BRANCH_NOT_FOUND</div>
+          <div class="flow" style="margin:0; flex-direction:column; gap:8px;">
+            <div class="flow-step" style="border-color:#2a0a0a;">
+              <div class="fs-label" style="font-size:12px;">TXN với BRANCH_CODE = 'BR_FAKE_999'</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#2a0a0a;">
+              <div class="fs-label" style="font-size:12px;">foreachBatch: join miss</div>
+              <div class="fs-sub">ERROR_CODE = BRANCH_NOT_FOUND</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#2a0a0a;">
+              <div class="fs-label" style="font-size:12px;">T24_TXN_PENDING_JOIN STATUS=PENDING</div>
+              <div class="fs-sub">NEXT_RETRY_AT = now + 5min</div>
+            </div>
+          </div>
+          <div class="cmd-block" style="margin-top:8px; font-size:12px;">
+            <span class="cmd-key">python3</span> tools/test_pipeline.py<br>&nbsp;&nbsp;--scenario dlq
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px; color:#4ade80; font-weight:700; letter-spacing:1px; margin-bottom:8px;">S6: DLQ RETRY → RESOLVED</div>
+          <div class="flow" style="margin:0; flex-direction:column; gap:8px;">
+            <div class="flow-step" style="border-color:#1a2e1a;">
+              <div class="fs-label" style="font-size:12px;">INSERT T24_BRANCH 'BR_FAKE_999'</div>
+              <div class="fs-sub">Branch xuất hiện sau TXN</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#1a2e1a;">
+              <div class="fs-label" style="font-size:12px;">reset NEXT_RETRY_AT = now</div>
+              <div class="fs-sub">Trigger retry ngay</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#1a2e1a;">
+              <div class="fs-label" style="font-size:12px;">retry_txn_branch_dlq.py --once</div>
+              <div class="fs-sub">STATUS = RESOLVED + ENRICHED ghi</div>
+            </div>
+          </div>
+          <div class="cmd-block" style="margin-top:8px; font-size:12px;">
+            <span class="cmd-key">python3</span> tools/test_pipeline.py<br>&nbsp;&nbsp;--scenario dlq_retry
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 8: S7 — STREAM JOIN ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S7 · Pattern 3</div>
+      <h2>Stream Join — <span style="color:#4ade80;">TXN ⋈ ACCOUNT Snapshot</span></h2>
+      <div class="flow" style="margin-top:18px;">
+        <div class="flow-step">
+          <div class="fs-icon">🏦</div>
+          <div class="fs-label">INSERT T24_ACCOUNT</div>
+          <div class="fs-sub">BALANCE = 5,000,000 VND</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">⏳</div>
+          <div class="fs-label">Chờ ACCOUNT sync</div>
+          <div class="fs-sub">T24_ACCOUNT_TARGET ≤ 30s</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="fs-icon">📨</div>
+          <div class="fs-label">INSERT T24_TRANSACTIONS</div>
+          <div class="fs-sub">Cùng ACCOUNT_ID</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">📸</div>
+          <div class="fs-label">T24_TXN_ACCOUNT_SNAPSHOT</div>
+          <div class="fs-sub">BALANCE_AT_TXN = 5,000,000</div>
+        </div>
+      </div>
+      <div class="cmd-block">
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario stream_join
+      </div>
+      <div class="two-col">
+        <div class="col-box">
+          <h4 style="color:#4ade80; font-size:14px;">Kiểm tra kết quả</h4>
+          <div class="check-row"><div class="check-icon">✅</div>Row trong T24_TXN_ACCOUNT_SNAPSHOT trong ≤ 90s</div>
+          <div class="check-row"><div class="check-icon">✅</div>BALANCE_AT_TXN = ONLINE_ACTUAL_BAL đúng tại thời điểm giao dịch</div>
+          <div class="check-row"><div class="check-icon">✅</div>TXN_TS_MS và ACCT_TS_MS đều có giá trị</div>
+        </div>
+        <div class="col-box">
+          <h4 style="color:#555; font-size:14px;">Watermark ±30 phút</h4>
+          <div style="font-size:13px; color:#888; line-height:1.6;">
+            Spark giữ state trong 30 phút. TXN và ACCOUNT cần xuất hiện trong cùng cửa sổ.<br>
+            Nếu ACCOUNT chưa có → DLQ <span style="color:#93c5fd; font-size:11px; font-family:monospace;">T24_TXN_ACCT_PENDING_JOIN</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 9: S8 & S9 — AGGREGATION ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S8 + S9 · Pattern 4</div>
+      <h2>Aggregation — <span style="color:#f59e0b;">Tích lũy & Revert</span></h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px;">
+        <div>
+          <div style="font-size:12px; color:#f59e0b; font-weight:700; letter-spacing:1px; margin-bottom:8px;">S8: TÍCH LŨY DOANH SỐ</div>
+          <div class="flow" style="margin:0; flex-direction:column; gap:6px;">
+            <div class="flow-step" style="border-color:#1c1200;">
+              <div class="fs-label" style="font-size:12px;">INSERT 3 TXN cùng BRANCH 'BR001'</div>
+              <div class="fs-sub">AMOUNT: 1M + 2M + 3M = 6M VND</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#1c1200;">
+              <div class="fs-label" style="font-size:12px;">foreachBatch aggregation</div>
+              <div class="fs-sub">groupBy + MERGE += delta</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#1a2e1a;">
+              <div class="fs-label" style="font-size:12px;">TOTAL_AMOUNT += 6M, TXN_COUNT += 3</div>
+            </div>
+          </div>
+          <div class="cmd-block" style="margin-top:8px; font-size:12px;">
+            <span class="cmd-key">python3</span> tools/test_pipeline.py<br>&nbsp;&nbsp;--scenario aggregation
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px; color:#f87171; font-weight:700; letter-spacing:1px; margin-bottom:8px;">S9: REVERT (op=u)</div>
+          <div class="flow" style="margin:0; flex-direction:column; gap:6px;">
+            <div class="flow-step" style="border-color:#1c1200;">
+              <div class="fs-label" style="font-size:12px;">INSERT TXN (AMOUNT = 5M VND)</div>
+              <div class="fs-sub">TOTAL_AMOUNT += 5M → chờ 40s</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#2a0a0a;">
+              <div class="fs-label" style="font-size:12px;">UPDATE STATUS = 'REVERSED' (op=u)</div>
+              <div class="fs-sub">before.AMOUNT = 5M</div>
+            </div>
+            <div style="text-align:center; color:#333; font-size:14px;">↓</div>
+            <div class="flow-step" style="border-color:#1a2e1a;">
+              <div class="fs-label" style="font-size:12px;">TOTAL_AMOUNT -= 5M (revert delta)</div>
+            </div>
+          </div>
+          <div class="cmd-block" style="margin-top:8px; font-size:12px;">
+            <span class="cmd-key">python3</span> tools/test_pipeline.py<br>&nbsp;&nbsp;--scenario revert
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 10: S10 — LATENCY ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="section-tag">S10 · Latency</div>
+      <h2>Đo latency <span class="accent">end-to-end thực tế</span></h2>
+      <div class="flow" style="margin-top:18px;">
+        <div class="flow-step">
+          <div class="fs-icon">🚀</div>
+          <div class="fs-label">INSERT 10 TXN</div>
+          <div class="fs-sub">Ghi t0 = now()</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">📊</div>
+          <div class="fs-label">poll_until()</div>
+          <div class="fs-sub">Chờ all 10 trong T24_TXN_ENRICHED</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1e3a5f;">
+          <div class="fs-icon">⏱️</div>
+          <div class="fs-label">Tính latency thực</div>
+          <div class="fs-sub">ENRICHED_AT − CREATE_MS/1000</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:#1a2e1a;">
+          <div class="fs-icon">✅</div>
+          <div class="fs-label">Assert p95 ≤ 90s</div>
+          <div class="fs-sub">min/p50/p95/max</div>
+        </div>
+      </div>
+      <div class="cmd-block">
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario latency
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-size:12px; color:#3B82F6; font-weight:700; letter-spacing:1px; margin-bottom:12px; text-align:left;">PHÂN BỔ LATENCY THÔNG THƯỜNG</div>
+        <div class="latency-bar">
+          <div class="lb-label">Debezium → Kafka</div>
+          <div class="lb-track"><div class="lb-fill" style="width:15%; background:#3B82F6;"></div></div>
+          <div class="lb-val" style="color:#3B82F6;">~2s</div>
+        </div>
+        <div class="latency-bar">
+          <div class="lb-label">Kafka → Spark batch</div>
+          <div class="lb-track"><div class="lb-fill" style="width:65%; background:#8B5CF6;"></div></div>
+          <div class="lb-val" style="color:#8B5CF6;">~10s</div>
+        </div>
+        <div class="latency-bar">
+          <div class="lb-label">Spark → Oracle MERGE</div>
+          <div class="lb-track"><div class="lb-fill" style="width:10%; background:#4ade80;"></div></div>
+          <div class="lb-val" style="color:#4ade80;">~1s</div>
+        </div>
+        <div class="latency-bar">
+          <div class="lb-label">Total p50</div>
+          <div class="lb-track"><div class="lb-fill" style="width:85%; background:#f59e0b;"></div></div>
+          <div class="lb-val" style="color:#f59e0b;">~15s</div>
+        </div>
+        <div class="latency-bar">
+          <div class="lb-label">Total p95 (target)</div>
+          <div class="lb-track"><div class="lb-fill" style="width:100%; background:#f87171;"></div></div>
+          <div class="lb-val" style="color:#f87171;">≤ 90s</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SLIDE 11: CHẠY TẤT CẢ + KẾT QUẢ ── -->
+  <div class="slide">
+    <div class="slide-inner">
+      <div class="label">Kết quả demo</div>
+      <h2>Chạy tất cả kịch bản & <span class="accent">kết quả mong đợi</span></h2>
+      <div class="cmd-block" style="margin-top:18px;">
+        <span class="cmd-comment"># Prerequisite: Spark job đang chạy</span><br>
+        spark-submit --master spark://spark-master:7077 \<br>
+        &nbsp;&nbsp;--py-files jobs/packages.zip jobs/main.py<br><br>
+        <span class="cmd-comment"># Chạy tất cả 10 kịch bản (120s timeout)</span><br>
+        <span class="cmd-key">python3</span> tools/test_pipeline.py --scenario all --timeout 120<br><br>
+        <span class="cmd-comment"># Monitoring real-time</span><br>
+        <span class="cmd-key">python3</span> tools/debug_counts.py --detail
+      </div>
+      <div style="margin-top:20px; display:grid; grid-template-columns:repeat(5,1fr); gap:10px;">
+        <div style="background:#1a2e1a; border:1px solid #4ade80; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:24px; font-weight:800; color:#4ade80;">10</div>
+          <div style="font-size:11px; color:#666; margin-top:4px;">Tests total</div>
+        </div>
+        <div style="background:#1a2e1a; border:1px solid #4ade80; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:24px; font-weight:800; color:#4ade80;">3</div>
+          <div style="font-size:11px; color:#666; margin-top:4px;">CDC Sync</div>
+        </div>
+        <div style="background:#2d1b69; border:1px solid #8B5CF6; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:24px; font-weight:800; color:#8B5CF6;">3</div>
+          <div style="font-size:11px; color:#666; margin-top:4px;">Static Join + DLQ</div>
+        </div>
+        <div style="background:#1a2e1a; border:1px solid #4ade80; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:24px; font-weight:800; color:#4ade80;">1</div>
+          <div style="font-size:11px; color:#666; margin-top:4px;">Stream Join</div>
+        </div>
+        <div style="background:#1c1200; border:1px solid #f59e0b; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:24px; font-weight:800; color:#f59e0b;">3</div>
+          <div style="font-size:11px; color:#666; margin-top:4px;">Aggregation+Latency</div>
+        </div>
+      </div>
+      <div style="margin-top:16px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:20px; align-items:center; justify-content:center;">
+        <span style="font-size:13px; color:#4ade80; font-weight:700;">PASS</span>
+        <span style="font-size:13px; color:#aaa;">Mỗi assert_true() in ra kịch bản + trạng thái + giá trị thực tế</span>
+        <span style="font-size:13px; color:#f87171; font-weight:700;">FAIL</span>
+        <span style="font-size:13px; color:#aaa;">In ra giá trị nhận được và cleanup test data vẫn chạy</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+<div id="counter">1 / 11</div>
+<button id="prev">←</button>
+<button id="next">→</button>
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let cur = 0;
+  function show(n) {
+    slides[cur].classList.remove('active');
+    cur = (n + slides.length) % slides.length;
+    slides[cur].classList.add('active');
+    document.getElementById('counter').textContent = (cur+1)+' / '+slides.length;
+  }
+  document.getElementById('next').addEventListener('click', () => show(cur+1));
+  document.getElementById('prev').addEventListener('click', () => show(cur-1));
+  document.addEventListener('keydown', e => {
+    if (e.key==='ArrowRight'||e.key==='ArrowDown') show(cur+1);
+    if (e.key==='ArrowLeft' ||e.key==='ArrowUp')   show(cur-1);
+  });
+</script>
+</body>
+</html>

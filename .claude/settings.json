@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\jobs\")",
+      "Bash(Select-Object FullName, Attributes)",
+      "Bash(Format-Table -AutoSize)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:alexioannides.com)",
+      "WebFetch(domain:www.uber.com)",
+      "WebFetch(domain:www.sparkcodehub.com)",
+      "WebFetch(domain:engineeringfordatascience.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:packaging.python.org)",
+      "WebFetch(domain:www.confluent.io)",
+      "WebFetch(domain:www.databricksters.com)",
+      "WebFetch(domain:dustinvannoy.com)",
+      "WebFetch(domain:www.databricks.com)",
+      "WebFetch(domain:netflixtechblog.com)",
+      "WebFetch(domain:eng.uber.com)",
+      "WebFetch(domain:risingwave.com)",
+      "WebFetch(domain:debezium.io)",
+      "WebFetch(domain:www.waitingforcode.com)",
+      "WebFetch(domain:artie.com)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:streamkap.com)",
+      "WebFetch(domain:docs.databricks.com)",
+      "WebFetch(domain:kafka-options-explorer.conduktor.io)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\jobs\\\\stream_join\\\\acct_cust_join.py\" -Force)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\jobs\\\\tools\\\\retry_acct_cust_dlq.py\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\dags\\\\shared\")",
+      "Bash(Remove-Item -Recurse -Force \"c:/Users/linhl_ufzmt5s/OneDrive/One - FSS/Bank Workshop/_AI in Action/poc-spark_streaming/lakehouse-oss-vuong.ngo\")"
+    ]
+  }
+}
