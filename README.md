@@ -44,7 +44,7 @@ poc-spark_streaming/
 
 ```bash
 # 1. Tạo bảng Oracle target
-sqlplus LPB_POC/LPB_POC@//host:1521/dbpdb @jobs/sql/create_target_tables.sql
+sqlplus FSS_STREAM/FSS_STREAM@//host:1521/dbpdb @jobs/sql/create_target_tables.sql
 
 # 2. Build packages
 pip install --target jobs/packages oracledb
@@ -73,9 +73,9 @@ Xem hướng dẫn đầy đủ tại [jobs/README.md](jobs/README.md).
 
 - Oracle 19c (T24 core banking) — nguồn CDC
 - Debezium 2.x — LogMiner connector
-- Kafka — event bus (topic per bảng, prefix `oracle.LPB_POC.`)
+- Kafka — event bus (topic per bảng, prefix `oracle.FSS_STREAM.`)
 - Spark Structured Streaming 3.5, PySpark
-- Oracle ODS — target (schema `LPB_POC`), ghi qua `oracledb` thin mode
+- Oracle ODS — target (schema `FSS_STREAM`), ghi qua `oracledb` thin mode
 - Airflow MWAA + EMR — orchestration (optional, xem `dags/`)
 
 ---
@@ -86,8 +86,8 @@ Config mẫu nằm tại [docs/config/](docs/config/):
 
 | File | Mô tả |
 |---|---|
-| `oracle-lpb-connector-origin.json` | Config gốc, không có SMT |
-| `oracle-lpb-connector.json` | Dùng `ExtractNewRecordState` SMT (envelope unwrap) |
-| `oracle-lpb-connector-v2.json` | Dùng `ReplaceField` SMT (bỏ source/ts_us/ts_ns fields) |
+| `oracle-fss-connector-origin.json` | Config gốc, không có SMT |
+| `oracle-fss-connector.json` | Dùng `ExtractNewRecordState` SMT (envelope unwrap) |
+| `oracle-fss-connector-v2.json` | Dùng `ReplaceField` SMT (bỏ source/ts_us/ts_ns fields) |
 | `oracle-debezium-kafka-test-sla-v*.json` | Config test SLA với bảng `T24_TRANSACTIONS_TEST_SLA` |
 | `Cau hinh debezium vao kafka Oracle.txt` | Hướng dẫn bật ARCHIVELOG + supplemental logging Oracle |

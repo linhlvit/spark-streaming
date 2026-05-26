@@ -30,7 +30,8 @@
       "Bash(Remove-Item \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\jobs\\\\stream_join\\\\acct_cust_join.py\" -Force)",
       "Bash(Remove-Item \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\jobs\\\\tools\\\\retry_acct_cust_dlq.py\" -Force)",
       "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\linhl_ufzmt5s\\\\OneDrive\\\\One - FSS\\\\Bank Workshop\\\\_AI in Action\\\\poc-spark_streaming\\\\dags\\\\shared\")",
-      "Bash(Remove-Item -Recurse -Force \"c:/Users/linhl_ufzmt5s/OneDrive/One - FSS/Bank Workshop/_AI in Action/poc-spark_streaming/lakehouse-oss-vuong.ngo\")"
+      "Bash(Remove-Item -Recurse -Force \"c:/Users/linhl_ufzmt5s/OneDrive/One - FSS/Bank Workshop/_AI in Action/poc-spark_streaming/lakehouse-oss-vuong.ngo\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

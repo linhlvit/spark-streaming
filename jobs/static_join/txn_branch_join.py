@@ -1,7 +1,7 @@
 """
 txn_branch_join.py — Spark Stream-Static Join
-    Stream : Kafka oracle.LPB_POC.T24_TRANSACTIONS  (Debezium CDC)
-    Static : Oracle LPB_POC.T24_BRANCH              (oracledb, refresh mỗi batch)
+    Stream : Kafka oracle.FSS_STREAM.T24_TRANSACTIONS  (Debezium CDC)
+    Static : Oracle FSS_STREAM.T24_BRANCH              (oracledb, refresh mỗi batch)
 
 Output:
     T24_TXN_ENRICHED      — giao dịch đã join được branch

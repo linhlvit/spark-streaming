@@ -1,7 +1,7 @@
 """
 txn_acct_join.py — Spark Stream-Stream Join (Transaction × Account)
-    Stream A : Kafka oracle.LPB_POC.T24_TRANSACTIONS  (Debezium CDC)
-    Stream B : Kafka oracle.LPB_POC.T24_ACCOUNT       (Debezium CDC)
+    Stream A : Kafka oracle.FSS_STREAM.T24_TRANSACTIONS  (Debezium CDC)
+    Stream B : Kafka oracle.FSS_STREAM.T24_ACCOUNT       (Debezium CDC)
 
 Mục đích:
     Ghi nhận trạng thái số dư tài khoản tại thời điểm xảy ra giao dịch.

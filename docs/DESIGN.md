@@ -24,7 +24,7 @@
 Oracle Source (T24)
     │
     ▼  Debezium LogMiner CDC
-Kafka Topics  oracle.LPB_POC.*
+Kafka Topics  oracle.FSS_STREAM.*
     │
     ├─► sync job              → T24_*_TARGET              (mirror 1:1)
     ├─► static_join job       → T24_TXN_ENRICHED           (TXN enriched với BRANCH)
@@ -34,12 +34,12 @@ Kafka Topics  oracle.LPB_POC.*
     └─► branch_sales_agg job  → T24_BRANCH_SALES_SUMMARY   (doanh số tích lũy theo chi nhánh)
     │
     ▼
-Oracle Target — schema LPB_POC
+Oracle Target — schema FSS_STREAM
 ```
 
 **Stack:**
 - Debezium 2.x — LogMiner connector, Oracle 19c
-- Kafka (topic per bảng, prefix `oracle.LPB_POC.`)
+- Kafka (topic per bảng, prefix `oracle.FSS_STREAM.`)
 - Spark Structured Streaming 3.5, PySpark
 - Oracle target: `oracledb` thin mode (không dùng JDBC driver)
 
@@ -139,7 +139,7 @@ op=u: SIGNED_AMOUNT = -before.AMOUNT  → TOTAL -= AMOUNT   (giao dịch bị re
 **Mục đích:** Mirror dữ liệu từ 4 bảng nguồn sang target 1:1, xử lý đủ 4 loại op Debezium.
 
 ```
-Kafka (oracle.LPB_POC.T24_*)
+Kafka (oracle.FSS_STREAM.T24_*)
     └─► parse Debezium envelope (op, before, after)
             ├── op = r/c/u → MERGE vào *_TARGET (upsert)
             └── op = d     → DELETE khỏi *_TARGET (theo PK)
@@ -149,10 +149,10 @@ Kafka (oracle.LPB_POC.T24_*)
 
 | Kafka Topic | Target Table |
 |---|---|
-| `oracle.LPB_POC.T24_TRANSACTIONS` | `T24_TRANSACTIONS_TARGET` |
-| `oracle.LPB_POC.T24_ACCOUNT` | `T24_ACCOUNT_TARGET` |
-| `oracle.LPB_POC.T24_CUSTOMER` | `T24_CUSTOMER_TARGET` |
-| `oracle.LPB_POC.T24_BRANCH` | `T24_BRANCH_TARGET` |
+| `oracle.FSS_STREAM.T24_TRANSACTIONS` | `T24_TRANSACTIONS_TARGET` |
+| `oracle.FSS_STREAM.T24_ACCOUNT` | `T24_ACCOUNT_TARGET` |
+| `oracle.FSS_STREAM.T24_CUSTOMER` | `T24_CUSTOMER_TARGET` |
+| `oracle.FSS_STREAM.T24_BRANCH` | `T24_BRANCH_TARGET` |
 
 **Thiết kế quyết định:**
 - Schema tự động từ DDL file (`sql/create_target_tables.sql`) qua `core/schema_parser.py` — không hardcode column list
@@ -298,7 +298,7 @@ Chạy trên cả hai topic để có số liệu riêng:
 
 ```bash
 python3 tools/measure_watermark.py \
-  --topics oracle.LPB_POC.T24_TRANSACTIONS,oracle.LPB_POC.T24_ACCOUNT \
+  --topics oracle.FSS_STREAM.T24_TRANSACTIONS,oracle.FSS_STREAM.T24_ACCOUNT \
   --samples 5000
 ```
 
@@ -325,7 +325,7 @@ SELECT
     PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ABS(TXN_TS_MS - ACCT_TS_MS)) / 1000.0 AS p95_skew_s,
     PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY ABS(TXN_TS_MS - ACCT_TS_MS)) / 1000.0 AS p99_skew_s,
     MAX(ABS(TXN_TS_MS - ACCT_TS_MS)) / 1000.0                                           AS max_skew_s
-FROM LPB_POC.T24_TXN_ACCOUNT_SNAPSHOT
+FROM FSS_STREAM.T24_TXN_ACCOUNT_SNAPSHOT
 WHERE SNAPSHOT_AT >= SYSTIMESTAMP - INTERVAL '7' DAY;
 ```
 
@@ -357,7 +357,7 @@ SELECT
     TRUNC(PENDING_SINCE, 'HH') AS hour_bucket,
     COUNT(*)                   AS dlq_inserts,
     COUNT(*) / 60.0            AS per_minute
-FROM LPB_POC.T24_TXN_ACCT_PENDING_JOIN
+FROM FSS_STREAM.T24_TXN_ACCT_PENDING_JOIN
 WHERE PENDING_SINCE >= SYSTIMESTAMP - INTERVAL '24' HOUR
 GROUP BY TRUNC(PENDING_SINCE, 'HH')
 ORDER BY 1;
@@ -458,7 +458,7 @@ Cách alert theo error code:
 ```sql
 -- Đếm DLQ mới trong 1 giờ qua theo loại lỗi
 SELECT ERROR_CODE, COUNT(*) AS cnt
-FROM LPB_POC.T24_TXN_PENDING_JOIN
+FROM FSS_STREAM.T24_TXN_PENDING_JOIN
 WHERE PENDING_SINCE >= SYSTIMESTAMP - INTERVAL '1' HOUR
   AND STATUS = 'PENDING'
 GROUP BY ERROR_CODE;
@@ -565,7 +565,7 @@ Khi cần re-snapshot một bảng cụ thể (không restart connector):
 ```sql
 INSERT INTO debezium_signal (id, type, data)
 VALUES ('reснap-1', 'execute-snapshot',
-        '{"data-collections": ["LPB_POC.T24_ACCOUNT"], "type": "incremental"}');
+        '{"data-collections": ["FSS_STREAM.T24_ACCOUNT"], "type": "incremental"}');
 ```
 Incremental snapshot đọc theo chunk, không lock bảng, không gây ORA-01555.
 
@@ -699,9 +699,9 @@ Xóa RESOLVED/FAILED rows theo TTL (Variable `DLQ_TTL_DAYS`, default 30 ngày), 
 | Variable | Mô tả | Ví dụ |
 |---|---|---|
 | `EMR_CLUSTER_ID` | ID EMR cluster đang chạy | `j-XXXXXXXXXXXX` |
-| `S3_JOBS_PATH` | Path chứa jobs code | `s3://lpb-poc/jobs` |
-| `S3_LOGS_PATH` | Path lưu EMR Step logs | `s3://lpb-poc/logs/emr` |
-| `S3_CHECKPOINTS_PATH` | Spark checkpoint | `s3://lpb-poc/checkpoints` |
+| `S3_JOBS_PATH` | Path chứa jobs code | `s3://fss-stream/jobs` |
+| `S3_LOGS_PATH` | Path lưu EMR Step logs | `s3://fss-stream/logs/emr` |
+| `S3_CHECKPOINTS_PATH` | Spark checkpoint | `s3://fss-stream/checkpoints` |
 | `SPARK_PACKAGES` | Maven packages | `org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5` |
 | `BOOTSTRAP_COMPLETED` | Flag tránh re-bootstrap | `true` / `false` |
 | `DLQ_MAX_RETRY` | Số retry tối đa | `5` |
@@ -712,14 +712,14 @@ Xóa RESOLVED/FAILED rows theo TTL (Variable `DLQ_TTL_DAYS`, default 30 ngày), 
 
 ```bash
 # Sync code lên S3 (chạy sau mỗi lần update)
-aws s3 sync jobs/ s3://lpb-poc-bucket/jobs/ --exclude "*.pyc" --exclude "__pycache__/*"
-aws s3 sync dags/ s3://lpb-poc-bucket/dags/
+aws s3 sync jobs/ s3://fss-stream-bucket/jobs/ --exclude "*.pyc" --exclude "__pycache__/*"
+aws s3 sync dags/ s3://fss-stream-bucket/dags/
 
 # Build packages.zip trước khi sync
 pip install --target jobs/packages oracledb
 cd jobs/packages && zip -r ../packages.zip . && cd ..
 zip -r jobs/packages.zip jobs/config.py jobs/core/ jobs/sync/ jobs/static_join/ jobs/stream_join/
-aws s3 cp jobs/packages.zip s3://lpb-poc-bucket/jobs/packages.zip
+aws s3 cp jobs/packages.zip s3://fss-stream-bucket/jobs/packages.zip
 ```
 
 ---
@@ -795,8 +795,8 @@ SELECT b.BRANCH_NAME,
        s.TOTAL_AMOUNT,
        s.TXN_COUNT,
        s.UPDATED_AT
-FROM LPB_POC.T24_BRANCH_SALES_SUMMARY s
-JOIN LPB_POC.T24_BRANCH_TARGET b ON b.BRANCH_CODE = s.BRANCH_CODE
+FROM FSS_STREAM.T24_BRANCH_SALES_SUMMARY s
+JOIN FSS_STREAM.T24_BRANCH_TARGET b ON b.BRANCH_CODE = s.BRANCH_CODE
 WHERE s.RPT_DATE  = TRUNC(SYSDATE)
   AND s.CURRENCY_CODE = 'VND'
 ORDER BY s.TOTAL_AMOUNT DESC;
@@ -806,8 +806,8 @@ SELECT b.REGION_NAME,
        s.RPT_DATE,
        SUM(s.TOTAL_AMOUNT) AS REGION_TOTAL,
        SUM(s.TXN_COUNT)    AS REGION_TXN_COUNT
-FROM LPB_POC.T24_BRANCH_SALES_SUMMARY s
-JOIN LPB_POC.T24_BRANCH_TARGET b ON b.BRANCH_CODE = s.BRANCH_CODE
+FROM FSS_STREAM.T24_BRANCH_SALES_SUMMARY s
+JOIN FSS_STREAM.T24_BRANCH_TARGET b ON b.BRANCH_CODE = s.BRANCH_CODE
 WHERE s.RPT_DATE >= TRUNC(SYSDATE) - 6
   AND s.CURRENCY_CODE = 'VND'
 GROUP BY b.REGION_NAME, s.RPT_DATE

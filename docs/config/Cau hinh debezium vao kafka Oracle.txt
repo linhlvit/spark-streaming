@@ -148,19 +148,19 @@ curl http://192.168.26.181:8083/connectors/oracle-t24-connector/status
 resstart
 curl -X POST http://192.168.26.181:8083/connectors/oracle-t24-connector/restart
 
-curl -X POST http://192.168.26.181:8083/connectors/oracle-lpb-connector/reset
+curl -X POST http://192.168.26.181:8083/connectors/oracle-fss-connector/reset
 
 delete
 curl -X DELETE http://192.168.26.181:8083/connectors/oracle-t24-connector
 
-curl -X DELETE http://192.168.26.181:8083/connectors/oracle-lpb-connector
+curl -X DELETE http://192.168.26.181:8083/connectors/oracle-fss-connector
 
 post
 curl -X POST http://192.168.26.181:8083/connectors -H "Content-Type: application/json" -d @oracle-t24-connector.json
 
-curl -X POST http://192.168.26.181:8083/connectors -H "Content-Type: application/json" -d @oracle-lpb-connector.json
+curl -X POST http://192.168.26.181:8083/connectors -H "Content-Type: application/json" -d @oracle-fss-connector.json
 
-curl -X POST http://192.168.26.181:8083/connectors -H "Content-Type: application/json" -d @oracle-lpb-connector-20260309.json
+curl -X POST http://192.168.26.181:8083/connectors -H "Content-Type: application/json" -d @oracle-fss-connector-20260309.json
 
 SELECT * FROM DBA_TAB_PRIVS WHERE GRANTEE = 'C##DEBEZIUM';
 

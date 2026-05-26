@@ -65,7 +65,7 @@ def create_kafka_stream(spark, brokers, topic):
 
 def parse_t24_account_message(df):
     """
-    Parse Debezium CDC message từ topic oracle.LPB_POC.T24_ACCOUNT
+    Parse Debezium CDC message từ topic oracle.FSS_STREAM.T24_ACCOUNT
 
     Debezium envelope (schemas.enable=false):
     {
@@ -146,7 +146,7 @@ def main():
     
     # Configuration
     KAFKA_BROKERS = "kafka:29092"
-    KAFKA_TOPIC = "oracle.LPB_POC.T24_ACCOUNT"
+    KAFKA_TOPIC = "oracle.FSS_STREAM.T24_ACCOUNT"
     TRIGGER_INTERVAL = "5 seconds"  # Batch interval
     
     print("\n" + "="*60)

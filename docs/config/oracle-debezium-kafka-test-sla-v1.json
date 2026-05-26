@@ -1,5 +1,5 @@
 {
-  "name": "oracle-lpb-connector-test-sla-v1",
+  "name": "oracle-fss-connector-test-sla-v1",
   "config": {
     "connector.class": "io.debezium.connector.oracle.OracleConnector",
     "tasks.max": "1",
@@ -16,7 +16,7 @@
     "schema.history.internal.kafka.bootstrap.servers": "kafka:29092",
     "schema.history.internal.kafka.topic": "schema-history.oracle_test_sla_v1",
     "schema.history.internal.store.only.captured.tables.ddl": "true",
-    "table.include.list": "LPB_POC.T24_TRANSACTIONS_TEST_SLA",
+    "table.include.list": "FSS_STREAM.T24_TRANSACTIONS_TEST_SLA",
     "include.schema.changes": "false",
 	"snapshot.locking.mode": "none",
 	"key.converter": "org.apache.kafka.connect.json.JsonConverter",

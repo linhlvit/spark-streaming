@@ -9,7 +9,7 @@ from pyspark.sql.types import StructType, StructField, StringType
 # KAFKA
 # ─────────────────────────────────────────────
 KAFKA_BOOTSTRAP_SERVERS = "kafka:29092"
-TOPIC_PREFIX            = "oracle.LPB_POC"
+TOPIC_PREFIX            = "oracle.FSS_STREAM"
 
 # ─────────────────────────────────────────────
 # ORACLE SOURCE (CDC)
@@ -17,11 +17,11 @@ TOPIC_PREFIX            = "oracle.LPB_POC"
 ORACLE_HOST     = "192.168.26.180"
 ORACLE_PORT     = 1521
 ORACLE_SERVICE  = "dbpdb"
-ORACLE_USER     = "LPB_POC"
-ORACLE_PASSWORD = "LPB_POC"
+ORACLE_USER     = "FSS_STREAM"
+ORACLE_PASSWORD = "FSS_STREAM"
 ORACLE_DSN      = f"{ORACLE_HOST}:{ORACLE_PORT}/{ORACLE_SERVICE}"
 
-TARGET_SCHEMA   = "LPB_POC"
+TARGET_SCHEMA   = "FSS_STREAM"
 
 # ─────────────────────────────────────────────
 # SPARK / CHECKPOINT

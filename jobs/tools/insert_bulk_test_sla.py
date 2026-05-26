@@ -1,5 +1,5 @@
 """
-Bulk insert 100,000 bản ghi vào LPB_POC.T24_TRANSACTIONS_TEST_SLA
+Bulk insert 100,000 bản ghi vào FSS_STREAM.T24_TRANSACTIONS_TEST_SLA
 Dùng oracledb + executemany + multi-threading để tối đa tốc độ.
 
 Yêu cầu:
@@ -26,10 +26,10 @@ logger = logging.getLogger(__name__)
 # CONFIG
 # ─────────────────────────────────────────────
 ORACLE_DSN      = "192.168.26.180:1521/dbpdb"
-ORACLE_USER     = "LPB_POC"
-ORACLE_PASSWORD = "LPB_POC"
+ORACLE_USER     = "FSS_STREAM"
+ORACLE_PASSWORD = "FSS_STREAM"
 
-TARGET_TABLE    = "LPB_POC.T24_TRANSACTIONS_TEST_SLA"
+TARGET_TABLE    = "FSS_STREAM.T24_TRANSACTIONS_TEST_SLA"
 TOTAL_ROWS      = 100_000
 START_IDX       = 200_000     # offset để tránh trùng TRANSACTION_ID với data cũ
 BATCH_SIZE      = 1_000       # số row mỗi lần executemany

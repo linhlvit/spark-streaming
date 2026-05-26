@@ -184,11 +184,11 @@ docker cp jobs/ spark-master:/opt/spark/jobs/
 ### 3b. Deploy lên EMR + MWAA (AWS)
 ```bash
 # Sync jobs code lên S3
-aws s3 sync jobs/ s3://lpb-poc-bucket/jobs/ --exclude "*.pyc" --exclude "__pycache__/*"
-aws s3 cp jobs/packages.zip s3://lpb-poc-bucket/jobs/packages.zip
+aws s3 sync jobs/ s3://fss-stream-bucket/jobs/ --exclude "*.pyc" --exclude "__pycache__/*"
+aws s3 cp jobs/packages.zip s3://fss-stream-bucket/jobs/packages.zip
 
 # Sync DAGs lên S3 (MWAA tự pick up sau vài phút)
-aws s3 sync dags/ s3://lpb-poc-bucket/dags/
+aws s3 sync dags/ s3://fss-stream-bucket/dags/
 
 # Set Airflow Variables (MWAA UI hoặc CLI)
 # EMR_CLUSTER_ID, S3_JOBS_PATH, S3_LOGS_PATH, S3_CHECKPOINTS_PATH

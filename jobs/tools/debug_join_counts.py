@@ -22,8 +22,8 @@ from confluent_kafka import Consumer, KafkaError, TopicPartition
 # CONFIG
 # ─────────────────────────────────────────────
 KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-ACCT_TOPIC = "oracle.LPB_POC.T24_ACCOUNT"
-CUST_TOPIC = "oracle.LPB_POC.T24_CUSTOMER"
+ACCT_TOPIC = "oracle.FSS_STREAM.T24_ACCOUNT"
+CUST_TOPIC = "oracle.FSS_STREAM.T24_CUSTOMER"
 
 # Timeout chờ message mới (giây) — dừng đọc khi không có message mới trong khoảng này
 IDLE_TIMEOUT_SEC = 5

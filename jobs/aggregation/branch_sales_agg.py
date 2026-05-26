@@ -1,6 +1,6 @@
 """
 branch_sales_agg.py — Spark Stateful Aggregation (Pattern 4)
-    Stream : Kafka oracle.LPB_POC.T24_TRANSACTIONS  (Debezium CDC)
+    Stream : Kafka oracle.FSS_STREAM.T24_TRANSACTIONS  (Debezium CDC)
 
 Mục đích:
     Tính tổng doanh số theo chi nhánh (BRANCH_CODE) và ngày giao dịch,

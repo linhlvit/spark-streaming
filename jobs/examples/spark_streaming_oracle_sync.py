@@ -1,7 +1,7 @@
 """
 Spark Structured Streaming — Kafka (Debezium) → Oracle TARGET
-Reads from  : oracle.LPB_POC.{TABLE}  (Kafka topics)
-Writes to   : LPB_POC.{TABLE}_TARGET  (Oracle via python-oracledb)
+Reads from  : oracle.FSS_STREAM.{TABLE}  (Kafka topics)
+Writes to   : FSS_STREAM.{TABLE}_TARGET  (Oracle via python-oracledb)
 
 Config mỗi bảng chỉ cần: tên bảng + primary key.
 Schema parse động từ JSON trong từng batch.
@@ -21,15 +21,15 @@ logger = logging.getLogger(__name__)
 # CONFIG
 # ─────────────────────────────────────────────
 KAFKA_BOOTSTRAP_SERVERS = "kafka:29092"
-TOPIC_PREFIX            = "oracle.LPB_POC"
-TARGET_SCHEMA           = "LPB_POC"
+TOPIC_PREFIX            = "oracle.FSS_STREAM"
+TARGET_SCHEMA           = "FSS_STREAM"
 CHECKPOINT_BASE         = "/opt/spark/checkpoints/oracle_sync"
 
 ORACLE_HOST     = "192.168.26.180"
 ORACLE_PORT     = 1521
 ORACLE_SERVICE  = "dbpdb"
-ORACLE_USER     = "LPB_POC"
-ORACLE_PASSWORD = "LPB_POC"       # TODO: thay password thực tế
+ORACLE_USER     = "FSS_STREAM"
+ORACLE_PASSWORD = "FSS_STREAM"       # TODO: thay password thực tế
 
 # Chỉ cần khai báo tên bảng và primary key
 TABLES = [

@@ -24,13 +24,13 @@ def get_cluster_id() -> str:
 # S3 paths — sync từ repo này lên S3 trước khi chạy DAG
 # ─────────────────────────────────────────────
 def get_s3_jobs_path() -> str:
-    return Variable.get("S3_JOBS_PATH", default_var="s3://lpb-poc-bucket/jobs")
+    return Variable.get("S3_JOBS_PATH", default_var="s3://fss-stream-bucket/jobs")
 
 def get_s3_logs_path() -> str:
-    return Variable.get("S3_LOGS_PATH", default_var="s3://lpb-poc-bucket/logs/emr")
+    return Variable.get("S3_LOGS_PATH", default_var="s3://fss-stream-bucket/logs/emr")
 
 def get_s3_checkpoints_path() -> str:
-    return Variable.get("S3_CHECKPOINTS_PATH", default_var="s3://lpb-poc-bucket/checkpoints")
+    return Variable.get("S3_CHECKPOINTS_PATH", default_var="s3://fss-stream-bucket/checkpoints")
 
 def get_spark_packages() -> str:
     return Variable.get(

@@ -145,7 +145,7 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
   <!-- ── SLIDE 1: TITLE ── -->
   <div class="slide active">
     <div class="slide-inner">
-      <div class="label">POC · LPB Bank</div>
+      <div class="label">POC · FSS Stream</div>
       <h1>Spark Streaming<br><span class="accent">CDC Oracle → Oracle</span></h1>
       <div class="divider"></div>
       <p class="sub">Thiết kế giải pháp đồng bộ & làm giàu dữ liệu real-time</p>
@@ -198,7 +198,7 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-label">Kafka Topics</div>
-          <div class="step-sub">oracle.LPB_POC.*<br>1 topic / bảng</div>
+          <div class="step-sub">oracle.FSS_STREAM.*<br>1 topic / bảng</div>
         </div>
         <div class="arrow">→</div>
         <div class="step">
@@ -210,7 +210,7 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
         <div class="step">
           <div class="step-num">5</div>
           <div class="step-label">Oracle ODS</div>
-          <div class="step-sub">Target tables<br>schema LPB_POC</div>
+          <div class="step-sub">Target tables<br>schema FSS_STREAM</div>
         </div>
       </div>
       <div style="margin-top:28px; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; text-align:left;">
@@ -273,10 +273,10 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
       <table class="tc-table" style="margin-top:28px;">
         <thead><tr><th>Kafka Topic</th><th>Target Table</th><th>Last-write-wins cột</th></tr></thead>
         <tbody>
-          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_TRANSACTIONS</code></td><td>T24_TRANSACTIONS_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">TRANSACTION_TIME</code></td></tr>
-          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_ACCOUNT</code></td><td>T24_ACCOUNT_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">EVENT_TIME</code></td></tr>
-          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_CUSTOMER</code></td><td>T24_CUSTOMER_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">UPDATED_AT</code></td></tr>
-          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.LPB_POC.T24_BRANCH</code></td><td>T24_BRANCH_TARGET</td><td><code style="color:#555; font-family:monospace;">— (immutable)</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.FSS_STREAM.T24_TRANSACTIONS</code></td><td>T24_TRANSACTIONS_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">TRANSACTION_TIME</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.FSS_STREAM.T24_ACCOUNT</code></td><td>T24_ACCOUNT_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">EVENT_TIME</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.FSS_STREAM.T24_CUSTOMER</code></td><td>T24_CUSTOMER_TARGET</td><td><code style="color:#4ade80; font-family:monospace;">UPDATED_AT</code></td></tr>
+          <tr><td><code style="color:#93c5fd; font-family:monospace;">oracle.FSS_STREAM.T24_BRANCH</code></td><td>T24_BRANCH_TARGET</td><td><code style="color:#555; font-family:monospace;">— (immutable)</code></td></tr>
         </tbody>
       </table>
       <div style="margin-top:20px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:14px 20px; text-align:left;">
@@ -296,7 +296,7 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
           <div class="artifact-type" style="color:#c4b5fd;">STREAM (Kafka)</div>
           <div class="aicon">📨</div>
           <div class="atitle">T24_TRANSACTIONS</div>
-          <div class="afile">oracle.LPB_POC.T24_TRANSACTIONS</div>
+          <div class="afile">oracle.FSS_STREAM.T24_TRANSACTIONS</div>
         </div>
         <div class="art-arrow">+</div>
         <div class="artifact-box" style="border-color:#1e3a5f;">
