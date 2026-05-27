@@ -1,0 +1,29 @@
+{
+  "name": "oracle-lpb-connector-test",
+  "config": {
+    "connector.class": "io.debezium.connector.oracle.OracleConnector",
+    "tasks.max": "1",
+    "database.hostname": "192.168.26.180",
+    "database.port": "1521",
+    "database.user": "C##DEBEZIUM",
+    "database.password": "dbz",
+    "database.dbname": "db",
+    "database.pdb.name": "dbpdb",
+    "database.connection.adapter": "logminer",
+	"database.server.name": "oracle-server",
+	"log.mining.strategy": "online_catalog",
+    "topic.prefix": "oracle",
+    "schema.history.internal.kafka.bootstrap.servers": "kafka:29092",
+    "schema.history.internal.kafka.topic": "schema-history.oracle",
+    "schema.history.internal.store.only.captured.tables.ddl": "true",
+    "table.include.list": "FSS_STREAM.T24_TRANSACTIONS, FSS_STREAM.T24_ACCOUNT, FSS_STREAM.T24_CUSTOMER, FSS_STREAM.T24_BRANCH",
+    "include.schema.changes": "false",
+	"snapshot.locking.mode": "none",
+	"key.converter": "org.apache.kafka.connect.json.JsonConverter",
+	"key.converter.schemas.enable": "false"	,
+	"value.converter": "org.apache.kafka.connect.json.JsonConverter",
+	"value.converter.schemas.enable": "false",
+	"value.converter.decimal.format": "numeric",
+	"snapshot.mode": "initial"
+  }
+}
