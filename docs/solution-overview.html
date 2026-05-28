@@ -383,13 +383,26 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
           <div style="font-size:13px; color:#666;">Số dư tài khoản tại thời điểm giao dịch (BALANCE_AT_TXN)</div>
         </div>
       </div>
-      <div style="margin-top:16px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:12px; align-items:center;">
-        <span style="font-size:13px; color:#4ade80; font-weight:700; white-space:nowrap;">Join condition:</span>
-        <code style="font-size:13px; color:#93c5fd; font-family:monospace;">INNER JOIN ON ACCOUNT_ID AND txn_ts BETWEEN acct_ts ± 30 MINUTES</code>
+      <div style="margin-top:16px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:14px 20px; text-align:left;">
+        <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:10px;">
+          <span style="font-size:13px; color:#4ade80; font-weight:700; white-space:nowrap; margin-top:2px;">Join condition:</span>
+          <div>
+            <code style="font-size:12px; color:#93c5fd; font-family:monospace; display:block; margin-bottom:4px;">ON ACCOUNT_ID AND acct_ts_ms IN [txn_ts_ms, txn_ts_ms + 30']</code>
+            <code style="font-size:12px; color:#555; font-family:monospace; display:block;">AND acct_event_ts &lt;= txn_event_ts + INTERVAL 30 MINUTES  -- state bound</code>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; margin-bottom:6px;">
+          <span style="font-size:12px; color:#f59e0b; font-weight:700; white-space:nowrap;">ts_ms (Oracle):</span>
+          <span style="font-size:12px; color:#aaa;">xác định window business — bền vững khi Kafka replay từng topic độc lập</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <span style="font-size:12px; color:#60a5fa; font-weight:700; white-space:nowrap;">kafka_ts (upper bound):</span>
+          <span style="font-size:12px; color:#aaa;">Spark state eviction — không dùng lower bound tránh lỗi khi 1 topic replay độc lập</span>
+        </div>
       </div>
-      <div style="margin-top:10px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:12px; align-items:center;">
-        <span style="font-size:13px; color:#4ade80; font-weight:700; white-space:nowrap;">Watermark:</span>
-        <span style="font-size:13px; color:#aaa;"><code style="color:#93c5fd; font-family:monospace;">kafka.timestamp</code> (broker) thay vì <code style="color:#f87171; font-family:monospace;">ts_ms</code> — tránh evict sớm khi replay. Không khớp → DLQ <code style="color:#93c5fd; font-family:monospace;">T24_TXN_ACCT_PENDING_JOIN</code></span>
+      <div style="margin-top:10px; background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:12px 20px; text-align:left; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:13px; color:#4ade80; font-weight:700; white-space:nowrap;">DLQ retry:</span>
+        <span style="font-size:13px; color:#aaa;">Lookup <code style="color:#93c5fd; font-family:monospace;">ACCOUNT_TARGET</code> (current state) → resolve best-effort với flag <code style="color:#f59e0b; font-family:monospace;">BALANCE_IS_APPROXIMATE=1</code></span>
       </div>
     </div>
   </div>
@@ -578,6 +591,16 @@ p   { font-size:22px; color:#a0a0a0; line-height:1.6; margin-top:16px; }
             <td>DLQ retry</td>
             <td>Standalone + exponential backoff</td>
             <td>Daemon thread không được Spark checkpoint quản lý</td>
+          </tr>
+          <tr>
+            <td>Stream join window</td>
+            <td><code style="color:#93c5fd; font-family:monospace;">acct_ts_ms ∈ [txn_ts_ms, +30']</code></td>
+            <td>Core banking UPDATE ACCOUNT sau TXN — chỉ look-forward, không lấy số dư trước giao dịch</td>
+          </tr>
+          <tr>
+            <td>DLQ resolve balance</td>
+            <td><code style="color:#f59e0b; font-family:monospace;">BALANCE_IS_APPROXIMATE=1</code></td>
+            <td>ACCOUNT_TARGET là current state — không thể lấy lại đúng số dư tại thời điểm giao dịch</td>
           </tr>
         </tbody>
       </table>

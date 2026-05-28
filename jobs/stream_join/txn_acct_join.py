@@ -160,14 +160,16 @@ _SNAPSHOT_MERGE = f"""
         :BALANCE_AT_TXN         AS BALANCE_AT_TXN,
         :WORKING_BALANCE_AT_TXN AS WORKING_BALANCE_AT_TXN,
         :ACCT_CURRENCY_CODE     AS ACCT_CURRENCY_CODE,
-        :TXN_TS_MS              AS TXN_TS_MS,
-        :ACCT_TS_MS             AS ACCT_TS_MS
+        :TXN_TS_MS                  AS TXN_TS_MS,
+        :ACCT_TS_MS                 AS ACCT_TS_MS,
+        :BALANCE_IS_APPROXIMATE     AS BALANCE_IS_APPROXIMATE
     FROM DUAL) s
     ON (t.TRANSACTION_ID = s.TRANSACTION_ID)
     WHEN MATCHED THEN UPDATE SET
         t.BALANCE_AT_TXN=s.BALANCE_AT_TXN,
         t.WORKING_BALANCE_AT_TXN=s.WORKING_BALANCE_AT_TXN,
         t.ACCT_TS_MS=s.ACCT_TS_MS,
+        t.BALANCE_IS_APPROXIMATE=s.BALANCE_IS_APPROXIMATE,
         t.SNAPSHOT_AT=SYSTIMESTAMP
     WHEN NOT MATCHED THEN INSERT (
         TRANSACTION_ID, ACCOUNT_ID, CUSTOMER_ID,
@@ -175,14 +177,14 @@ _SNAPSHOT_MERGE = f"""
         TRANSACTION_TYPE, AMOUNT, CURRENCY_CODE, CHANNEL,
         BRANCH_CODE, REFERENCE_NO, TRANSACTION_STATUS,
         BALANCE_AT_TXN, WORKING_BALANCE_AT_TXN, ACCT_CURRENCY_CODE,
-        TXN_TS_MS, ACCT_TS_MS
+        TXN_TS_MS, ACCT_TS_MS, BALANCE_IS_APPROXIMATE
     ) VALUES (
         s.TRANSACTION_ID, s.ACCOUNT_ID, s.CUSTOMER_ID,
         s.TRANSACTION_DATE, s.VALUE_DATE, s.TRANSACTION_TIME,
         s.TRANSACTION_TYPE, s.AMOUNT, s.CURRENCY_CODE, s.CHANNEL,
         s.BRANCH_CODE, s.REFERENCE_NO, s.TRANSACTION_STATUS,
         s.BALANCE_AT_TXN, s.WORKING_BALANCE_AT_TXN, s.ACCT_CURRENCY_CODE,
-        s.TXN_TS_MS, s.ACCT_TS_MS
+        s.TXN_TS_MS, s.ACCT_TS_MS, s.BALANCE_IS_APPROXIMATE
     )
 """
 
@@ -230,7 +232,7 @@ _PENDING_RETRY_INC = f"""
 # ─────────────────────────────────────────────
 # BIND HELPERS
 # ─────────────────────────────────────────────
-def _to_snapshot_bind(txn: Dict, acct: Dict, txn_ts_ms, acct_ts_ms) -> Dict:
+def _to_snapshot_bind(txn: Dict, acct: Dict, txn_ts_ms, acct_ts_ms, approximate: bool = False) -> Dict:
     return {
         "TRANSACTION_ID":         txn.get("TRANSACTION_ID"),
         "ACCOUNT_ID":             txn.get("ACCOUNT_ID"),
@@ -250,6 +252,7 @@ def _to_snapshot_bind(txn: Dict, acct: Dict, txn_ts_ms, acct_ts_ms) -> Dict:
         "ACCT_CURRENCY_CODE":     acct.get("CURRENCY_CODE"),
         "TXN_TS_MS":              txn_ts_ms,
         "ACCT_TS_MS":             acct_ts_ms,
+        "BALANCE_IS_APPROXIMATE": 1 if approximate else 0,
     }
 
 
@@ -389,7 +392,7 @@ def _make_join_batch_writer():
         )
 
         from pyspark.sql.window import Window
-        from pyspark.sql.functions import row_number, desc
+        from pyspark.sql.functions import row_number
 
         # TXN matched với ACCOUNT trong window
         matched   = batch_df.filter(
@@ -400,8 +403,9 @@ def _make_join_batch_writer():
             col("TRANSACTION_ID").isNotNull() & col("TXN_ACCT_ACCOUNT_ID").isNull()
         )
 
-        # Dedup: mỗi TXN chỉ lấy ACCOUNT update gần nhất
-        w = Window.partitionBy("TRANSACTION_ID").orderBy(desc("acct_ts_ms"))
+        # Dedup: mỗi TXN chỉ lấy ACCOUNT update SỚM NHẤT sau giao dịch
+        # (lần update đầu tiên của core banking sau khi ghi TXN)
+        w = Window.partitionBy("TRANSACTION_ID").orderBy("acct_ts_ms")
         matched = (
             matched
             .withColumn("_rn", row_number().over(w))
@@ -515,7 +519,7 @@ def retry_pending_once(max_retry: int = MAX_RETRY) -> Dict[str, int]:
                 "TRANSACTION_TYPE", "AMOUNT", "CURRENCY_CODE",
                 "CHANNEL", "BRANCH_CODE", "REFERENCE_NO", "TRANSACTION_STATUS",
             ]}
-            snapshot_rows.append(_to_snapshot_bind(txn, acct_info, row["TXN_TS_MS"], None))
+            snapshot_rows.append(_to_snapshot_bind(txn, acct_info, row["TXN_TS_MS"], None, approximate=True))
             resolved_ids.append(bind_key)
         elif retry_count >= max_retry:
             logger.warning(
@@ -578,10 +582,18 @@ def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
     txn_df.createOrReplaceTempView("txn_stream")
     acct_df.createOrReplaceTempView("acct_stream_b")
 
-    # INNER JOIN: chỉ emit khi có đủ cả 2 bên trong window.
-    # TXN không match → Spark tự emit NULL phía ACCOUNT sau khi watermark vượt qua
+    # LEFT OUTER JOIN với one-sided window, tách biệt 2 mục đích:
+    # Logic: core banking ghi TXN trước, sau đó mới UPDATE ACCOUNT với số dư mới
+    # → ACCT event luôn xuất hiện SAU TXN event.
+    #
+    # acct_ts_ms / txn_ts_ms  (Oracle ts_ms): xác định đúng window business,
+    #   bền vững khi Kafka replay vì ts_ms là timestamp gốc từ Oracle redo log.
+    # acct_event_ts (kafka_ts, upper bound only): cho Spark biết state bound để
+    #   evict state an toàn. Không dùng lower bound kafka_ts vì 2 topic có thể
+    #   bị lỗi và replay độc lập → kafka_ts lệch nhau → join sai.
+    #
+    # TXN không match → Spark emit NULL phía ACCOUNT sau khi watermark vượt qua
     # → foreachBatch phân loại thành TXN_ONLY → DLQ.
-    # Dùng FULL OUTER để capture cả txn_only và acct_only nếu cần mở rộng sau.
     joined_df = spark.sql("""
         SELECT
             t.TRANSACTION_ID,
@@ -607,8 +619,9 @@ def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
         FROM txn_stream t
         LEFT OUTER JOIN acct_stream_b a
             ON  t.ACCOUNT_ID = a.ACCOUNT_ID
-            AND t.txn_event_ts >= a.acct_event_ts - INTERVAL 30 MINUTES
-            AND t.txn_event_ts <= a.acct_event_ts + INTERVAL 30 MINUTES
+            AND a.acct_ts_ms >= t.txn_ts_ms
+            AND a.acct_ts_ms <= t.txn_ts_ms + (30 * 60 * 1000)
+            AND a.acct_event_ts <= t.txn_event_ts + INTERVAL 30 MINUTES
     """)
 
     join_query = (
