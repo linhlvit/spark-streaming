@@ -74,7 +74,7 @@ EC_NO_ACCOUNT_MATCH = "TXN_NO_ACCOUNT_MATCH"
 # Exponential backoff schedule cho stream_join DLQ (tính bằng phút).
 # Base interval 10 phút — ACCOUNT_TARGET sync lag thường vài phút,
 # nhưng watermark window ±30' nghĩa là TXN đã chờ ít nhất 30' trước khi vào DLQ.
-BACKOFF_MINUTES_STREAM: list[int] = [10, 30, 120, 360, 1440]
+BACKOFF_MINUTES_STREAM: List[int] = [10, 30, 120, 360, 1440]
 #  retry 0 → +10'   (10 phút sau khi vào DLQ — ACCOUNT_TARGET có thể đã có)
 #  retry 1 → +30'   (30 phút — đủ thời gian để sync job cập nhật)
 #  retry 2 → +120'  (2 giờ — ACCOUNT có thể đang trong quá trình tạo)
@@ -127,7 +127,7 @@ def _epoch_ms_to_dt(ms) -> Optional[datetime]:
         return None
 
 
-def _next_retry_at(retry_count: int, schedule: list[int] = BACKOFF_MINUTES_STREAM) -> datetime:
+def _next_retry_at(retry_count: int, schedule: List[int] = BACKOFF_MINUTES_STREAM) -> datetime:
     """
     Tính thời điểm được phép retry tiếp theo theo backoff schedule.
     retry_count: số lần đã retry (0 = lần đầu, chưa retry lần nào).

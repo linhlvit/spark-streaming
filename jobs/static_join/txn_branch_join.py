@@ -60,7 +60,7 @@ EC_BRANCH_TABLE_EMPTY = "BRANCH_TABLE_EMPTY"
 # Exponential backoff schedule cho static_join DLQ (tính bằng phút).
 # Base interval 5 phút — BRANCH lag thường resolve trong vài phút.
 # RETRY_COUNT → số phút chờ trước lần retry tiếp theo.
-BACKOFF_MINUTES_STATIC: list[int] = [5, 15, 60, 240, 1440]
+BACKOFF_MINUTES_STATIC: List[int] = [5, 15, 60, 240, 1440]
 #  retry 0 → +5'    (5 phút sau khi vào DLQ)
 #  retry 1 → +15'   (đã thử 1 lần, chờ thêm 15')
 #  retry 2 → +60'   (1 giờ — BRANCH có thể đang trong quá trình sync chậm)
@@ -102,7 +102,7 @@ def _epoch_ms_to_dt(ms) -> Optional[datetime]:
         return None
 
 
-def _next_retry_at(retry_count: int, schedule: list[int] = BACKOFF_MINUTES_STATIC) -> datetime:
+def _next_retry_at(retry_count: int, schedule: List[int] = BACKOFF_MINUTES_STATIC) -> datetime:
     """
     Tính thời điểm được phép retry tiếp theo theo backoff schedule.
     retry_count: số lần đã retry (0 = lần đầu tiên, chưa retry lần nào).
