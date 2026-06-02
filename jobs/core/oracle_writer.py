@@ -47,16 +47,35 @@ def _get_pool() -> oracledb.ConnectionPool:
 
 
 def get_connection() -> oracledb.Connection:
-    """Lấy connection từ pool, tự reset pool nếu bị drop."""
+    """Lấy connection từ pool, tự reset pool nếu bị drop (network/timeout).
+    Không retry nếu lỗi là authentication — tránh vòng lặp vô ích.
+    """
     global _pool
     try:
         conn = _get_pool().acquire()
-        # Ping để đảm bảo connection còn sống
         conn.ping()
         return conn
-    except Exception as e:
+    except oracledb.DatabaseError as e:
+        error_obj, = e.args
+        # ORA-01017: sai credentials — không retry, raise ngay để fail fast
+        if hasattr(error_obj, "code") and error_obj.code == 1017:
+            logger.error(
+                "Oracle authentication failed (ORA-01017). "
+                "Kiểm tra ORACLE_USER / ORACLE_PASSWORD trong config.py."
+            )
+            raise
+        # Lỗi khác (network drop, pool timeout) → recreate pool và thử lại
         logger.warning(f"Connection pool error: {e}. Recreating pool...")
-        # Reset pool và thử lại
+        try:
+            if _pool:
+                _pool.close(force=True)
+        except Exception:
+            pass
+        _pool = None
+        return _get_pool().acquire()
+    except oracledb.InterfaceError as e:
+        # DPY-1002: pool not open → recreate
+        logger.warning(f"Connection pool error: {e}. Recreating pool...")
         try:
             if _pool:
                 _pool.close(force=True)

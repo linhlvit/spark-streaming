@@ -35,9 +35,9 @@ from pyspark.sql.streaming import StreamingQuery
 from config import APP_NAME, SPARK_PACKAGES, SQL_FILE_PATH, TABLES
 from core.schema_parser import parse_sql_file
 from sync.stream_processor import start_table_stream
-from static_join.txn_branch_join import start_stream_static_join
-from stream_join.txn_acct_join import start_txn_acct_join
-from aggregation.branch_sales_agg import start_branch_sales_agg
+# from static_join.txn_branch_join import start_stream_static_join
+# from stream_join.txn_acct_join import start_txn_acct_join
+# from aggregation.branch_sales_agg import start_branch_sales_agg
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ def build_spark_session(job_names: List[str]) -> SparkSession:
         SparkSession.builder
         .appName(app_name)
         .config("spark.jars.packages", SPARK_PACKAGES)
+        .config("spark.sql.shuffle.partitions", "8")
         .getOrCreate()
     )
 
@@ -139,14 +140,14 @@ def main() -> None:
     if "sync" in job_names:
         all_queries.extend(start_sync_job(spark))
 
-    if "static_join" in job_names:
-        all_queries.extend(start_static_join_job(spark))
+    # if "static_join" in job_names:
+    #     all_queries.extend(start_static_join_job(spark))
 
-    if "txn_acct_join" in job_names:
-        all_queries.extend(start_txn_acct_join_job(spark))
+    # if "txn_acct_join" in job_names:
+    #     all_queries.extend(start_txn_acct_join_job(spark))
 
-    if "branch_sales_agg" in job_names:
-        all_queries.extend(start_branch_sales_agg_job(spark))
+    # if "branch_sales_agg" in job_names:
+    #     all_queries.extend(start_branch_sales_agg_job(spark))
 
     if not all_queries:
         logger.error("Không có query nào được khởi động.")

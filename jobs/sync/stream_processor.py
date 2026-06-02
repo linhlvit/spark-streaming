@@ -7,7 +7,7 @@ Mỗi bảng chạy một streaming query độc lập:
 
 import json
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import col, from_json, when
@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 # Cột timestamp dùng làm last-write-wins guard cho từng bảng.
 # Chỉ UPDATE khi event mới hơn row đang có — chống out-of-order CDC.
 # Bảng không có cột thời gian phù hợp → None (không guard, safe vì data ít thay đổi).
-_EVENT_TS_COL: dict[str, str | None] = {
+_EVENT_TS_COL: Dict[str, Optional[str]] = {
     "T24_TRANSACTIONS": "TRANSACTION_TIME",  # timestamp của giao dịch trong Oracle
-    "T24_ACCOUNT":      "EVENT_TIME",        # timestamp cập nhật số dư
+    "T24_ACCOUNT":      "UPDATED_AT",        # timestamp cập nhật số dư
     "T24_CUSTOMER":     "UPDATED_AT",        # timestamp cập nhật thông tin KH
     "T24_BRANCH":       None,                # BRANCH thay đổi rất hiếm, không cần guard
 }

@@ -18,7 +18,7 @@ ORACLE_HOST     = "192.168.26.180"
 ORACLE_PORT     = 1521
 ORACLE_SERVICE  = "dbpdb"
 ORACLE_USER     = "FSS_STREAM"
-ORACLE_PASSWORD = "FSS_STREAM"
+ORACLE_PASSWORD = "Dapchai123"
 ORACLE_DSN      = f"{ORACLE_HOST}:{ORACLE_PORT}/{ORACLE_SERVICE}"
 
 TARGET_SCHEMA   = "FSS_STREAM"
@@ -30,8 +30,8 @@ CHECKPOINT_BASE = "/opt/spark/checkpoints/oracle_schema_sync"
 APP_NAME        = "oracle-cdc-schema-sync"
 SPARK_PACKAGES  = "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.5"
 
-TRIGGER_INTERVAL        = "30 seconds"
-MAX_OFFSETS_PER_TRIGGER = 10000
+TRIGGER_INTERVAL        = "3 seconds"
+MAX_OFFSETS_PER_TRIGGER = 100000
 
 # ─────────────────────────────────────────────
 # SQL SCHEMA FILE
@@ -56,7 +56,7 @@ DEBEZIUM_ENVELOPE_SCHEMA = StructType([
     StructField("op",     StringType(), True),
     StructField("before", StringType(), True),
     StructField("after",  StringType(), True),
-    StructField("source", StringType(), True),
+    # StructField("source", StringType(), True),
     StructField("ts_ms",  StringType(), True),
 ])
 

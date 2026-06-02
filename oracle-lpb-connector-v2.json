@@ -1,5 +1,5 @@
 {
-  "name": "oracle-lpb-connector-test2",
+  "name": "oracle-fss-stream-connector",
   "config": {
     "connector.class": "io.debezium.connector.oracle.OracleConnector",
     "tasks.max": "1",
@@ -12,11 +12,11 @@
     "database.connection.adapter": "logminer",
     "database.server.name": "oracle-server",
     "log.mining.strategy": "online_catalog",
-    "topic.prefix": "oracle_v2",
+    "topic.prefix": "oracle",
     "schema.history.internal.kafka.bootstrap.servers": "kafka:29092",
-    "schema.history.internal.kafka.topic": "schema-history.oracle_v2",
+    "schema.history.internal.kafka.topic": "schema-history.oracle",
     "schema.history.internal.store.only.captured.tables.ddl": "true",
-    "table.include.list": "LPB_POC.T24_BRANCH_TARGET",
+    "table.include.list": "FSS_STREAM.T24_TRANSACTIONS, FSS_STREAM.T24_ACCOUNT, FSS_STREAM.T24_CUSTOMER, FSS_STREAM.T24_BRANCH",
     "include.schema.changes": "false",
     "snapshot.locking.mode": "none",
     "key.converter": "org.apache.kafka.connect.json.JsonConverter",
