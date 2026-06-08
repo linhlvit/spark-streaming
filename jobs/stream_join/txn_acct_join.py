@@ -324,7 +324,8 @@ def _read_kafka(spark: SparkSession, topic: str) -> DataFrame:
         .format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
         .option("subscribe", topic)
-        .option("startingOffsets", "latest")
+        .option("startingOffsets", "earliest")
+        # .option("startingOffsets", "latest")
         .option("failOnDataLoss", "false")
         .option("maxOffsetsPerTrigger", MAX_OFFSETS_PER_TRIGGER)
         .load()
@@ -345,7 +346,7 @@ def _build_txn_stream(spark: SparkSession) -> DataFrame:
             col("timestamp").alias("kafka_ts"),
         )
         .select("e.*", "kafka_ts")
-        .filter(col("op").isin("c", "u"))   # chỉ INSERT/UPDATE — không xử lý snapshot op=r
+        .filter(col("op").isin("c", "u", "r"))   # chỉ INSERT/UPDATE — không xử lý snapshot op=r
         .select(
             from_json(col("after"), TXN_SCHEMA).alias("t"),
             col("kafka_ts").alias("txn_event_ts"),
@@ -366,7 +367,7 @@ def _build_acct_stream(spark: SparkSession) -> DataFrame:
             col("timestamp").alias("kafka_ts"),
         )
         .select("e.*", "kafka_ts")
-        .filter(col("op").isin("r", "c", "u"))
+        .filter(col("op").isin("r", "c", "u", "r"))
         .select(
             from_json(col("after"), ACCT_SCHEMA).alias("a"),
             col("kafka_ts").alias("acct_event_ts"),
@@ -619,8 +620,7 @@ def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
         FROM txn_stream t
         LEFT OUTER JOIN acct_stream_b a
             ON  t.ACCOUNT_ID = a.ACCOUNT_ID
-            AND a.acct_ts_ms >= t.txn_ts_ms
-            AND a.acct_ts_ms <= t.txn_ts_ms + (30 * 60 * 1000)
+            AND a.acct_event_ts >= t.txn_event_ts
             AND a.acct_event_ts <= t.txn_event_ts + INTERVAL 30 MINUTES
     """)
 

@@ -8,15 +8,18 @@ Chạy:
     # Chỉ chạy 1 job
     spark-submit ... main.py --jobs sync
     spark-submit ... main.py --jobs static_join
+    spark-submit ... main.py --jobs txn_customer_join
     spark-submit ... main.py --jobs txn_acct_join
 
     # Chạy nhiều job
     spark-submit ... main.py --jobs sync,static_join
+    spark-submit ... main.py --jobs sync,txn_customer_join
     spark-submit ... main.py --jobs sync,txn_acct_join
 
 Các job hợp lệ:
     sync              — CDC sync T24_ACCOUNT/CUSTOMER/BRANCH/TRANSACTIONS → *_TARGET
     static_join       — T24_TRANSACTIONS ⋈ T24_BRANCH (static) → T24_TXN_ENRICHED
+    txn_customer_join — T24_TRANSACTIONS ⋈ T24_CUSTOMER (CDC cache) → T24_TXN_CUSTOMER_ENRICHED
     txn_acct_join     — T24_TRANSACTIONS ⋈ T24_ACCOUNT → T24_TXN_ACCOUNT_SNAPSHOT
     branch_sales_agg  — T24_TRANSACTIONS → T24_BRANCH_SALES_SUMMARY (cộng dồn doanh số)
 
@@ -36,13 +39,14 @@ from config import APP_NAME, SPARK_PACKAGES, SQL_FILE_PATH, TABLES
 from core.schema_parser import parse_sql_file
 from sync.stream_processor import start_table_stream
 from static_join.txn_branch_join import start_stream_static_join
+from static_join.txn_customer_join import start_stream_cdc_join
 from stream_join.txn_acct_join import start_txn_acct_join
 # from aggregation.branch_sales_agg import start_branch_sales_agg
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-VALID_JOBS = {"sync", "static_join", "txn_acct_join", "branch_sales_agg"}
+VALID_JOBS = {"sync", "static_join", "txn_customer_join", "txn_acct_join", "branch_sales_agg"}
 
 
 def parse_args():
@@ -100,6 +104,13 @@ def start_static_join_job(spark: SparkSession) -> List[StreamingQuery]:
     return [q]
 
 
+def start_txn_customer_join_job(spark: SparkSession) -> List[StreamingQuery]:
+    """cdc_cache_join: T24_TRANSACTIONS ⋈ _customer_cache (CDC) → T24_TXN_CUSTOMER_ENRICHED."""
+    q = start_stream_cdc_join(spark)
+    logger.info("[txn_customer_join] Started T24_TRANSACTIONS ⋈ T24_CUSTOMER (CDC cache)")
+    return [q]
+
+
 def start_txn_acct_join_job(spark: SparkSession) -> List[StreamingQuery]:
     """stream_stream_join: T24_TRANSACTIONS ⋈ T24_ACCOUNT → T24_TXN_ACCOUNT_SNAPSHOT."""
     qs = start_txn_acct_join(spark)
@@ -142,6 +153,9 @@ def main() -> None:
 
     if "static_join" in job_names:
         all_queries.extend(start_static_join_job(spark))
+
+    if "txn_customer_join" in job_names:
+        all_queries.extend(start_txn_customer_join_job(spark))
 
     if "txn_acct_join" in job_names:
         all_queries.extend(start_txn_acct_join_job(spark))
