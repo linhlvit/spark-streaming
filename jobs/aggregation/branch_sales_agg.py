@@ -198,13 +198,13 @@ def _make_batch_writer():
                 from_json(col("value").cast("string"), DEBEZIUM_ENVELOPE_SCHEMA).alias("e"),
             )
             .select("e.*")
-            .filter(col("op").isin("c", "u"))
+            .filter(col("op").isin("c", "u", "r"))
         )
 
         # op=c: lấy after, signed_amount = +AMOUNT, count_delta = +1
         insert_df = (
             parsed_df
-            .filter(col("op") == "c")
+            .filter(col("op").isin("c", "r"))
             .select(from_json(col("after"), TXN_SCHEMA).alias("t"))
             .select("t.*")
             .filter(
@@ -333,7 +333,8 @@ def start_branch_sales_agg(spark: SparkSession) -> StreamingQuery:
         .format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
         .option("subscribe", TXN_TOPIC)
-        .option("startingOffsets", "latest")
+        .option("startingOffsets", "earliest")
+        # .option("startingOffsets", "latest")
         .option("failOnDataLoss", "false")
         .option("maxOffsetsPerTrigger", MAX_OFFSETS_PER_TRIGGER)
         .load()

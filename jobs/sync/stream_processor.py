@@ -10,8 +10,9 @@ import logging
 from typing import Dict, List, Optional
 
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import col, from_json, when
+from pyspark.sql.functions import col, from_json, when, row_number
 from pyspark.sql.streaming import StreamingQuery
+from pyspark.sql.window import Window
 
 from config import (
     KAFKA_BOOTSTRAP_SERVERS,
@@ -60,14 +61,16 @@ def _parse_debezium(raw_df: DataFrame) -> DataFrame:
     """
     Parse Debezium CDC envelope từ Kafka value (JSON string).
 
-    Output schema: _op STRING, row_data STRING (JSON của after/before)
+    Output schema: _op STRING, _kafka_offset LONG, row_data STRING
+    Giữ _kafka_offset để dedup theo thứ tự sự kiện trong write_batch.
     """
     envelope_df = (
         raw_df
         .select(
-            from_json(col("value").cast("string"), DEBEZIUM_ENVELOPE_SCHEMA).alias("msg")
+            from_json(col("value").cast("string"), DEBEZIUM_ENVELOPE_SCHEMA).alias("msg"),
+            col("offset").alias("_kafka_offset"),
         )
-        .select("msg.*")
+        .select("msg.*", "_kafka_offset")
         .filter(col("op").isNotNull())
     )
 
@@ -79,7 +82,7 @@ def _parse_debezium(raw_df: DataFrame) -> DataFrame:
             .otherwise(col("before"))
         )
         .withColumn("_op", col("op"))
-        .select("_op", "row_data")
+        .select("_op", "_kafka_offset", "row_data")
         .filter(col("row_data").isNotNull())
     )
 
@@ -98,10 +101,27 @@ def _make_batch_writer(table_name: str, target_table: str, pk: str, col_types: d
         if batch_df.isEmpty():
             return
 
+        # Dedup: mỗi PK chỉ giữ event CUỐI CÙNG trong batch theo Kafka offset.
+        # Đảm bảo sequence INSERT→DELETE→INSERT kết thúc bằng INSERT (không mất row),
+        # và INSERT→DELETE kết thúc bằng DELETE (đúng).
+        from pyspark.sql.functions import get_json_object
+        batch_deduped = (
+            batch_df
+            .withColumn("_pk_val", get_json_object(col("row_data"), f"$.{pk}"))
+            .withColumn(
+                "_rn",
+                row_number().over(
+                    Window.partitionBy("_pk_val").orderBy(col("_kafka_offset").desc())
+                ),
+            )
+            .filter(col("_rn") == 1)
+            .drop("_rn", "_pk_val")
+        )
+
         upsert_data: List[Dict] = []
         delete_data: List[Dict] = []
 
-        for row in batch_df.collect():
+        for row in batch_deduped.collect():
             op       = row["_op"]
             row_dict = json.loads(row["row_data"])
             if op in ("r", "c", "u"):

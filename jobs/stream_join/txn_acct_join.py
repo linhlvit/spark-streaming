@@ -9,7 +9,7 @@ Mục đích:
     thay đổi cùng lúc khi có giao dịch mới — khác với CUSTOMER (dimension ít thay đổi).
 
 Output : T24_TXN_ACCOUNT_SNAPSHOT — giao dịch + snapshot số dư
-DLQ    : T24_TXN_ACCT_PENDING_JOIN — TXN chưa join được ACCOUNT trong window ±30'
+DLQ    : T24_TXN_ACCT_PENDING_JOIN — TXN chưa join được ACCOUNT trong window ±5'
            ERROR_REASON = TXN_NO_ACCOUNT_MATCH
 
 Watermark: kafka.timestamp (broker timestamp) — tránh evict sớm khi replay từ earliest.
@@ -61,7 +61,7 @@ ACCT_TARGET       = f"{TARGET_SCHEMA}.T24_ACCOUNT_TARGET"
 CHECKPOINT_JOIN   = f"{CHECKPOINT_BASE}/txn_acct_join/main"
 CHECKPOINT_DELETE = f"{CHECKPOINT_BASE}/txn_acct_join/delete"
 
-WATERMARK_DELAY = "30 minutes"
+WATERMARK_DELAY = "5 minutes"
 MAX_RETRY       = 5
 
 STATUS_PENDING  = "PENDING"
@@ -275,7 +275,7 @@ def _to_pending_bind(txn: Dict, txn_ts_ms) -> Dict:
         "TXN_TS_MS":          txn_ts_ms,
         "STATUS":             STATUS_PENDING,
         "ERROR_CODE":         EC_NO_ACCOUNT_MATCH,
-        "ERROR_REASON":       f"account_id='{account_id}' not synced within watermark window ±30min",
+        "ERROR_REASON":       f"account_id='{account_id}' not synced within watermark window ±5min",
         "NEXT_RETRY_AT":      _next_retry_at(retry_count=0),
     }
 
@@ -384,7 +384,13 @@ def _build_acct_stream(spark: SparkSession) -> DataFrame:
 # ─────────────────────────────────────────────
 def _make_join_batch_writer():
     def write_batch(batch_df: DataFrame, batch_id: int) -> None:
+        import time
+        t_start = time.time()
+        print(f"[batch={batch_id}] START: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_start))}")
+
         if batch_df.isEmpty():
+            t_end = time.time()
+            print(f"[batch={batch_id}] END (empty): {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_end))} | elapsed={t_end - t_start:.3f}s")
             return
 
         spark = batch_df.sparkSession
@@ -404,6 +410,8 @@ def _make_join_batch_writer():
             col("TRANSACTION_ID").isNotNull() & col("TXN_ACCT_ACCOUNT_ID").isNull()
         )
 
+        matched_count_before_dedup = matched.count()
+        print(f"[batch={batch_id}] matched BEFORE dedup: {matched_count_before_dedup} rows")
         # Dedup: mỗi TXN chỉ lấy ACCOUNT update SỚM NHẤT sau giao dịch
         # (lần update đầu tiên của core banking sau khi ghi TXN)
         w = Window.partitionBy("TRANSACTION_ID").orderBy("acct_ts_ms")
@@ -448,6 +456,9 @@ def _make_join_batch_writer():
             f"[batch={batch_id}] total={len(matched_rows)+len(txn_only_rows)} "
             f"snapshot={len(snapshot_rows)} pending={len(pending_rows)}"
         )
+
+        t_end = time.time()
+        print(f"[batch={batch_id}] END: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_end))} | elapsed={t_end - t_start:.3f}s")
 
     return write_batch
 
@@ -566,7 +577,7 @@ def retry_pending_once(max_retry: int = MAX_RETRY) -> Dict[str, int]:
 def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
     """
     Khởi động 2 streaming queries:
-      1. join_query   : T24_TRANSACTIONS ⋈ T24_ACCOUNT (INNER JOIN với watermark ±30')
+      1. join_query   : T24_TRANSACTIONS ⋈ T24_ACCOUNT (INNER JOIN với watermark ±5')
                         → T24_TXN_ACCOUNT_SNAPSHOT / T24_TXN_ACCT_PENDING_JOIN (DLQ)
       2. delete_query : T24_TRANSACTIONS op=d → DELETE khỏi T24_TXN_ACCOUNT_SNAPSHOT
 
@@ -595,7 +606,7 @@ def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
     #
     # TXN không match → Spark emit NULL phía ACCOUNT sau khi watermark vượt qua
     # → foreachBatch phân loại thành TXN_ONLY → DLQ.
-    joined_df = spark.sql("""
+    joined_df = spark.sql(f"""
         SELECT
             t.TRANSACTION_ID,
             t.ACCOUNT_ID,
@@ -621,7 +632,7 @@ def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
         LEFT OUTER JOIN acct_stream_b a
             ON  t.ACCOUNT_ID = a.ACCOUNT_ID
             AND a.acct_event_ts >= t.txn_event_ts
-            AND a.acct_event_ts <= t.txn_event_ts + INTERVAL 30 MINUTES
+            AND a.acct_event_ts <= t.txn_event_ts + INTERVAL {WATERMARK_DELAY}
     """)
 
     join_query = (
@@ -639,7 +650,8 @@ def start_txn_acct_join(spark: SparkSession) -> List[StreamingQuery]:
         .format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
         .option("subscribe", TXN_TOPIC)
-        .option("startingOffsets", "latest")
+        .option("startingOffsets", "earliest")
+        # .option("startingOffsets", "latest")
         .option("failOnDataLoss", "false")
         .load()
     )
