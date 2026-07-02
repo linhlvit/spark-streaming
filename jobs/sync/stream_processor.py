@@ -101,6 +101,11 @@ def _make_batch_writer(table_name: str, target_table: str, pk: str, col_types: d
         if batch_df.isEmpty():
             return
 
+        spark = batch_df.sparkSession
+        spark.sparkContext.setJobDescription(
+            f"[sync:{table_name}] batch={batch_id} — dedup & collect"
+        )
+
         # Dedup: mỗi PK chỉ giữ event CUỐI CÙNG trong batch theo Kafka offset.
         # Đảm bảo sequence INSERT→DELETE→INSERT kết thúc bằng INSERT (không mất row),
         # và INSERT→DELETE kết thúc bằng DELETE (đúng).
@@ -116,6 +121,10 @@ def _make_batch_writer(table_name: str, target_table: str, pk: str, col_types: d
             )
             .filter(col("_rn") == 1)
             .drop("_rn", "_pk_val")
+        )
+
+        spark.sparkContext.setJobDescription(
+            f"[sync:{table_name}] batch={batch_id} — collect rows"
         )
 
         upsert_data: List[Dict] = []

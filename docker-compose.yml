@@ -243,7 +243,7 @@ services:
     user: root
 
     command: >
-      bash -c "pip install oracledb kafka-python --quiet &&
+      bash -c "pip install oracledb kafka-python pyyaml --quiet &&
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master"
 
     ports:
@@ -269,7 +269,7 @@ services:
     user: root
 
     command: >
-      bash -c "pip install oracledb kafka-python --quiet &&
+      bash -c "pip install oracledb kafka-python pyyaml --quiet &&
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
 
     depends_on:
@@ -296,7 +296,7 @@ services:
     user: root
 
     command: >
-      bash -c "pip install oracledb kafka-python --quiet &&
+      bash -c "pip install oracledb kafka-python pyyaml --quiet &&
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
 
     depends_on:

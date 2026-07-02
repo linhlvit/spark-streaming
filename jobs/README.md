@@ -14,7 +14,9 @@ jobs/
 ├── config.py            # Tất cả cấu hình tập trung (Kafka, Oracle, Spark)
 │
 ├── sync/                # Pattern: CDC sync (1 file per bảng)
-│   └── stream_processor.py      # Sync 4 bảng T24_* → *_TARGET
+│   ├── stream_processor.py      # Sync 4 bảng T24_* → *_TARGET (hardcode)
+│   ├── yaml_stream_processor.py # Sync N bảng được cấu hình qua YAML
+│   └── table_sync_configs.yml   # Cấu hình bảng cho yaml_stream_processor
 │
 ├── static_join/         # Pattern: Stream ⋈ Static (1 file per job)
 │   └── txn_branch_join.py       # T24_TRANSACTIONS ⋈ T24_BRANCH → T24_TXN_ENRICHED
@@ -48,6 +50,10 @@ jobs/
 ### Thêm job mới
 
 ```
+# Thêm bảng sync mới qua YAML (cách nhanh nhất — không cần viết code)
+# → Mở sync/table_sync_configs.yml, thêm entry mới vào danh sách `tables`
+# → Khởi động lại: spark-submit ... main.py --jobs yaml_sync
+
 # Thêm static_join mới (ví dụ: LOAN ⋈ BRANCH)
 static_join/loan_branch_join.py   # copy txn_branch_join.py, đổi bảng
 tools/retry_loan_branch_dlq.py    # copy retry_txn_branch_dlq.py, đổi import
@@ -70,11 +76,17 @@ spark-submit \
 
 # Chỉ chạy 1 job
 spark-submit ... main.py --jobs sync
+spark-submit ... main.py --jobs static_join
 spark-submit ... main.py --jobs sync,static_join
 spark-submit ... main.py --jobs txn_acct_join
 spark-submit ... main.py --jobs branch_sales_agg
 
-# Các job hợp lệ: sync | static_join | txn_acct_join | branch_sales_agg
+# yaml_sync — đọc cấu hình bảng từ file YAML (mặc định: sync/table_sync_configs.yml)
+spark-submit ... main.py --jobs yaml_sync
+spark-submit ... main.py --jobs yaml_sync --sync-config /opt/spark/jobs/sync/my_tables.yml
+spark-submit ... main.py --jobs yaml_sync,static_join
+
+# Các job hợp lệ: sync | yaml_sync | static_join | txn_acct_join | branch_sales_agg
 
 # Lưu ý: txn_acct_join cần bootstrap trước lần đầu
 python3 tools/bootstrap_txn_acct.py --dry-run   # kiểm tra trước
@@ -171,9 +183,11 @@ Tất cả cấu hình tập trung tại [config.py](config.py):
 
 ### 2. Build packages
 ```bash
-pip install --target ./packages oracledb
+pip install --target ./packages oracledb pyyaml
 cd packages && zip -r ../packages.zip . && cd ..
 zip packages.zip config.py core/*.py sync/*.py static_join/*.py stream_join/*.py
+# Đính kèm file YAML config cùng với packages
+zip packages.zip sync/table_sync_configs.yml
 ```
 
 ### 3a. Deploy lên Spark cluster (local/Docker)

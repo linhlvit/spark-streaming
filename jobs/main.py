@@ -7,18 +7,25 @@ Chạy:
 
     # Chỉ chạy 1 job
     spark-submit ... main.py --jobs sync
+    spark-submit ... main.py --jobs yaml_sync
     spark-submit ... main.py --jobs static_join
     spark-submit ... main.py --jobs txn_customer_join
     spark-submit ... main.py --jobs txn_acct_join
 
+    # yaml_sync với file config tùy chỉnh
+    spark-submit ... main.py --jobs yaml_sync --sync-config /opt/spark/jobs/sync/my_tables.yml
+
     # Chạy nhiều job
     spark-submit ... main.py --jobs sync,static_join
+    spark-submit ... main.py --jobs yaml_sync,static_join
     spark-submit ... main.py --jobs sync,txn_customer_join
     spark-submit ... main.py --jobs sync,txn_acct_join
 
 Các job hợp lệ:
     sync              — CDC sync T24_ACCOUNT/CUSTOMER/BRANCH/
-                         TRANSACTIONS → *_TARGET
+                         TRANSACTIONS → *_TARGET (hardcode trong config.py)
+    yaml_sync         — CDC sync các bảng được cấu hình qua file YAML
+                         (mặc định: jobs/sync/table_sync_configs.yml)
     static_join       — T24_TRANSACTIONS ⋈ T24_BRANCH (static)
                          → T24_TXN_ENRICHED
     txn_customer_join — T24_TRANSACTIONS ⋈ T24_CUSTOMER (CDC cache)
@@ -55,6 +62,16 @@ from config import (
 from core.schema_parser import parse_sql_file
 from aggregation.branch_sales_agg import start_branch_sales_agg
 from sync.stream_processor import start_table_stream
+from sync.yaml_stream_processor import (
+    DEFAULT_CONFIG_PATH as YAML_SYNC_DEFAULT_CONFIG,
+    get_yaml_checkpoint_paths,
+    start_all_yaml_streams,
+)
+from sync.yaml_upsert_processor import (
+    DEFAULT_CONFIG_PATH as YAML_UPSERT_DEFAULT_CONFIG,
+    get_yaml_upsert_checkpoint_paths,
+    start_all_yaml_upsert_streams,
+)
 from static_join.txn_branch_join import start_stream_static_join
 from static_join.txn_customer_join import start_stream_cdc_join
 from stream_join.txn_acct_join import (
@@ -69,6 +86,8 @@ logger = logging.getLogger(__name__)
 
 VALID_JOBS = {
     "sync",
+    "yaml_sync",
+    "yaml_upsert",
     "static_join",
     "txn_customer_join",
     "txn_acct_join",
@@ -76,7 +95,11 @@ VALID_JOBS = {
 }
 
 
-def _checkpoint_paths_for_job(job_name: str) -> List[str]:
+def _checkpoint_paths_for_job(
+    job_name: str,
+    yaml_config_path: str = YAML_SYNC_DEFAULT_CONFIG,
+    upsert_config_path: str = YAML_UPSERT_DEFAULT_CONFIG,
+) -> List[str]:
     if job_name == "sync":
         return [
             f"{CHECKPOINT_BASE}/t24_transactions",
@@ -84,6 +107,10 @@ def _checkpoint_paths_for_job(job_name: str) -> List[str]:
             f"{CHECKPOINT_BASE}/t24_customer",
             f"{CHECKPOINT_BASE}/t24_branch",
         ]
+    if job_name == "yaml_sync":
+        return get_yaml_checkpoint_paths(yaml_config_path)
+    if job_name == "yaml_upsert":
+        return get_yaml_upsert_checkpoint_paths(upsert_config_path)
     if job_name == "static_join":
         return [f"{CHECKPOINT_BASE}/txn_branch_join"]
     if job_name == "txn_customer_join":
@@ -158,8 +185,8 @@ def _spark_context_is_stopped(spark: SparkSession) -> bool:
 
 def parse_args():
     """
-    Parse --jobs argument từ sys.argv.
-    spark-submit truyền args sau tên file: main.py --jobs sync,static_join
+    Parse --jobs và --sync-config argument từ sys.argv.
+    spark-submit truyền args sau tên file: main.py --jobs yaml_sync --sync-config /path/to/cfg.yml
     """
     parser = argparse.ArgumentParser(description="Spark Streaming CDC Oracle")
     parser.add_argument(
@@ -167,8 +194,26 @@ def parse_args():
         type=str,
         default="all",
         help=(
-            "Comma-separated list of jobs to run: sync,static_join,"
-            "stream_join (default: all)"
+            "Comma-separated list of jobs to run: sync,yaml_sync,static_join,"
+            "txn_customer_join,txn_acct_join,branch_sales_agg (default: all)"
+        ),
+    )
+    parser.add_argument(
+        "--sync-config",
+        type=str,
+        default=YAML_SYNC_DEFAULT_CONFIG,
+        help=(
+            "Đường dẫn tới file YAML config cho job yaml_sync "
+            f"(default: {YAML_SYNC_DEFAULT_CONFIG})"
+        ),
+    )
+    parser.add_argument(
+        "--upsert-config",
+        type=str,
+        default=YAML_UPSERT_DEFAULT_CONFIG,
+        help=(
+            "Đường dẫn tới file YAML config cho job yaml_upsert "
+            f"(default: {YAML_UPSERT_DEFAULT_CONFIG})"
         ),
     )
     # parse_known_args để bỏ qua các args của spark-submit
@@ -183,6 +228,11 @@ def build_spark_session(job_names: List[str]) -> SparkSession:
         .appName(app_name)
         .config("spark.jars.packages", SPARK_PACKAGES)
         .config("spark.sql.shuffle.partitions", "8")
+        # Tăng timeout Kafka metadata fetch — giảm thời gian stage offset management
+        .config("spark.sql.streaming.kafka.useDeprecatedOffsetFetching", "false")
+        # Giảm interval poll Kafka metadata (mặc định 1 phút) — cache lâu hơn
+        .config("spark.kafka.consumer.cache.capacity", "64")
+        .config("spark.kafka.consumer.cache.timeout", "600s") 
         .getOrCreate()
     )
 
@@ -232,6 +282,24 @@ def start_txn_acct_join_job(spark: SparkSession) -> List[StreamingQuery]:
     return qs
 
 
+def start_yaml_sync_job(
+    spark: SparkSession, config_path: str = YAML_SYNC_DEFAULT_CONFIG
+) -> List[StreamingQuery]:
+    """yaml_stream_processor: CDC sync các bảng từ file YAML → TARGET tables."""
+    queries = start_all_yaml_streams(spark, config_path)
+    logger.info("[yaml_sync] Started %d stream(s) from %s", len(queries), config_path)
+    return queries
+
+
+def start_yaml_upsert_job(
+    spark: SparkSession, config_path: str = YAML_UPSERT_DEFAULT_CONFIG
+) -> List[StreamingQuery]:
+    """yaml_upsert_processor: CDC upsert-only (không delete, không dedup) từ file YAML."""
+    queries = start_all_yaml_upsert_streams(spark, config_path)
+    logger.info("[yaml_upsert] Started %d stream(s) from %s", len(queries), config_path)
+    return queries
+
+
 def start_branch_sales_agg_job(spark: SparkSession) -> List[StreamingQuery]:
     """stateful_agg: T24_TRANSACTIONS → T24_BRANCH_SALES_SUMMARY."""
     q = start_branch_sales_agg(spark)
@@ -272,13 +340,19 @@ def main() -> None:
 
     try:
         for job_name in job_names:
-            for checkpoint_path in _checkpoint_paths_for_job(job_name):
+            for checkpoint_path in _checkpoint_paths_for_job(job_name, args.sync_config, args.upsert_config):
                 acquired_locks.append(
                     _acquire_checkpoint_lock(checkpoint_path, job_name)
                 )
 
         if "sync" in job_names:
             all_queries.extend(start_sync_job(spark))
+
+        if "yaml_sync" in job_names:
+            all_queries.extend(start_yaml_sync_job(spark, args.sync_config))
+
+        if "yaml_upsert" in job_names:
+            all_queries.extend(start_yaml_upsert_job(spark, args.upsert_config))
 
         if "static_join" in job_names:
             all_queries.extend(start_static_join_job(spark))
